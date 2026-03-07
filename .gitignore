@@ -1,5 +1,7 @@
+.git
 .cache
 compile_commands.json
 .objs
 bin
 lib
+dev

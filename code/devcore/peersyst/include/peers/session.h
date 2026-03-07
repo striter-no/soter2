@@ -1,0 +1,3 @@
+#ifndef PEER_SYSTEM_SESSION_H
+#endif
+#define PEER_SYSTEM_SESSION_H
