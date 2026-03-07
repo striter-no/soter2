@@ -4,7 +4,7 @@ int soter2_hnd_ACK(protopack *pck, nnet_fd nfd, pvd_sender *s, void *_ctx){
     if (!_ctx) return -1;
     (void)nfd;
 
-    printf("[ack] new ACK\n");
+    // printf("[ack] new ACK\n");
     app_context *ctx = _ctx;
     
     peer_info info;
@@ -14,7 +14,7 @@ int soter2_hnd_ACK(protopack *pck, nnet_fd nfd, pvd_sender *s, void *_ctx){
     }
 
     if (info.state == PEER_ST_INITED){
-        printf("[ack] sended PACK_ACK\n");
+        // printf("[ack] sended PACK_ACK\n");
         pvd_sender_send(
             s, 
             proto_msg_quick(ctx->rudp->self_uid, info.UID, 0, PACK_ACK),
@@ -24,7 +24,7 @@ int soter2_hnd_ACK(protopack *pck, nnet_fd nfd, pvd_sender *s, void *_ctx){
 
     // peers_db_schange(ctx->p_db, info.UID, PEER_ST_HANDSHAKING);
     peers_db_schange(ctx->p_db, info.UID, PEER_ST_ACTIVE);
-    printf("[ack] new active peer\n");
+    // printf("[ack] new active peer\n");
     return 0;
 }
 
@@ -32,7 +32,7 @@ int soter2_hnd_PUNCH(protopack *pck, nnet_fd nfd, pvd_sender *s, void *_ctx){
     if (!_ctx) return -1;
 
     naddr_t addr = ln_nfd2addr(nfd);
-    printf("[punch] new PUNCH from %s:%u\n", addr.ip.v4.ip, addr.ip.v4.port);
+    // printf("[punch] new PUNCH from %s:%u\n", addr.ip.v4.ip, addr.ip.v4.port);
     app_context *ctx = _ctx;
     
     peer_info info;
@@ -42,7 +42,7 @@ int soter2_hnd_PUNCH(protopack *pck, nnet_fd nfd, pvd_sender *s, void *_ctx){
     }
 
     peers_db_unfd(ctx->p_db, info.UID, nfd);
-    printf("[punch] uid: %u/%u\n", info.UID, pck->h_from);
+    // printf("[punch] uid: %u/%u\n", info.UID, pck->h_from);
 
     if (info.state != PEER_ST_INITED && info.state != PEER_ST_NATPUNCHING){
         fprintf(
@@ -53,7 +53,7 @@ int soter2_hnd_PUNCH(protopack *pck, nnet_fd nfd, pvd_sender *s, void *_ctx){
         return -1;
     }
 
-    printf("[punch] sended PACK_ACK\n");
+    // printf("[punch] sended PACK_ACK\n");
     pvd_sender_send(
         s, 
         proto_msg_quick(ctx->rudp->self_uid, info.UID, 0, PACK_ACK),
@@ -63,7 +63,7 @@ int soter2_hnd_PUNCH(protopack *pck, nnet_fd nfd, pvd_sender *s, void *_ctx){
     if (info.state == PEER_ST_NATPUNCHING)
         return 0;
 
-    printf("[punch] changed stats\n");
+    // printf("[punch] changed stats\n");
     peers_db_schange(ctx->p_db, info.UID, PEER_ST_NATPUNCHING);
     return 0;
 }

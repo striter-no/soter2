@@ -78,7 +78,7 @@ static void *pvd_listener_worker(void *_args){
         }
         
         listener_packet lpkt = {pkt, from};
-        printf("[pvd][listener] got new packet from %s:%u (%zu bytes): PKTTYPE: %d\n", addr.ip.v4.ip, addr.ip.v4.port, recved, pkt->packtype);
+        // printf("[pvd][listener] got new packet from %s:%u (%zu bytes): PKTTYPE: %d\n", addr.ip.v4.ip, addr.ip.v4.port, recved, pkt->packtype);
         prot_queue_push(&listener->packets, &lpkt);
         mt_evsock_notify(&listener->newpack_es);
     }

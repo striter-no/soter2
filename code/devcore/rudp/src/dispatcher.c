@@ -331,15 +331,15 @@ static void rudp_sender_worker(rudp_dispatcher *disp){
         return;
 
     naddr_t addr = ln_nfd2addr(pkt.nfd);
-    printf("[rudp_sender_worker] addr: %s:%u\n", addr.ip.v4.ip, addr.ip.v4.port);
+    // printf("[rudp_sender_worker] addr: %s:%u\n", addr.ip.v4.ip, addr.ip.v4.port);
     protopack *rpack = pkt.pack;
 
     uint32_t peer_id = rpack->h_to;
     rudp_channel *chan = NULL;
     if (0 > rudp_dispatcher_chan_get(disp, peer_id, &chan)){
-        printf("[rudp_sender_worker] creating new channel\n");
+        // printf("[rudp_sender_worker] creating new channel\n");
         rudp_dispatcher_chan_new(disp, pkt.nfd, peer_id);
-        printf("[rudp_sender_worker] created channel\n");
+        // printf("[rudp_sender_worker] created channel\n");
 
         rudp_dispatcher_chan_get(disp, peer_id, &chan);
     }
@@ -354,7 +354,7 @@ static void rudp_reader_worker(rudp_dispatcher *disp){
 
     rudp_channel *chan = NULL;
     if (0 > rudp_dispatcher_chan_get(disp, pkt.pack->h_from, &chan)){
-        printf("[rudp_reader_worker] created new channel\n");
+        // printf("[rudp_reader_worker] created new channel\n");
         rudp_dispatcher_chan_new(disp, pkt.nfd, pkt.pack->h_from);
         rudp_dispatcher_chan_get(disp, pkt.pack->h_from, &chan);
     }

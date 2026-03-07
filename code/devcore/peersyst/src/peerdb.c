@@ -94,8 +94,8 @@ int peers_db_unfd(peers_db *db, uint32_t UID, nnet_fd nfd){
     }
 
     info->nfd = nfd;
-    naddr_t addr = ln_nfd2addr(nfd);
-    printf("[peersdb][unfd] changed nfd to %s:%u\n", addr.ip.v4.ip, addr.ip.v4.port);
+    // naddr_t addr = ln_nfd2addr(nfd);
+    // printf("[peersdb][unfd] changed nfd to %s:%u\n", addr.ip.v4.ip, addr.ip.v4.port);
     
     prot_table_unlock(&db->data);
     return 0;

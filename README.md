@@ -5,7 +5,7 @@
 ## Project TODOs
 
 - [x] Create RUDP, Peer System, gossip mechanism, etc.
-- [ ] Create module to link all submodules (devcore)
+- [x] Create module to link all submodules (devcore)
 - [ ] Enable E2EE
 - [ ] Create basic CLI
 - [ ] Create basic Web interface

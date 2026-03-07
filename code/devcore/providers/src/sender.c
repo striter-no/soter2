@@ -49,7 +49,7 @@ int pvd_sender_start(pvd_sender *s){
 
 
 int pvd_sender_send(pvd_sender *s, protopack *packet, nnet_fd to){
-    printf("[pvd][sender] send called\n");
+    // printf("[pvd][sender] send called\n");
     if (!s || !packet) return -1;
 
     protopack *pkt = udp_copy_pack(packet);
@@ -58,7 +58,7 @@ int pvd_sender_send(pvd_sender *s, protopack *packet, nnet_fd to){
         .to   = to
     };
 
-    printf("[pvd][sender] send proceeded\n");
+    // printf("[pvd][sender] send proceeded\n");
     mt_evsock_notify(&s->newpack_es);
     prot_queue_push(&s->packets, &ppkt);
     free(packet);
@@ -73,7 +73,7 @@ static void *pvd_sender_worker(void *_args){
         int r = mt_evsock_wait(&sender->newpack_es, 100);
         if (r == 0) continue;
 
-        printf("[pvd][sender] awaited %d events...\n", r);
+        // printf("[pvd][sender] awaited %d events...\n", r);
         if (r < 0) {perror("poll()"); break;}
 
         pvd_sender_pack_t ppkt = {0};
@@ -90,7 +90,7 @@ static void *pvd_sender_worker(void *_args){
         char buf[2048] = {0};
 
         // printf("[pvd][sender]")
-        printf("[pvd][sender] sending %u bytes as dsize: %.*s\n", ppkt.pack->d_size, ppkt.pack->d_size, ppkt.pack->data);
+        // printf("[pvd][sender] sending %u bytes as dsize: %.*s\n", ppkt.pack->d_size, ppkt.pack->d_size, ppkt.pack->data);
         ssize_t s = protopack_send(retranslate_udp(ppkt.pack), buf);
         if (s < 0){
             fprintf(stderr, "protopack_send() failed");
@@ -101,7 +101,7 @@ static void *pvd_sender_worker(void *_args){
         }
 
         naddr_t addr = ln_nfd2addr(ppkt.to);
-        printf("[pvd][sender] sending %zd bytes to %s:%u\n", s, addr.ip.v4.ip, addr.ip.v4.port);
+        // printf("[pvd][sender] sending %zd bytes to %s:%u\n", s, addr.ip.v4.ip, addr.ip.v4.port);
         ln_usock_send(sender->p_usocket, buf, s, ppkt.to);
 
 end:

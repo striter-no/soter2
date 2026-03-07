@@ -86,7 +86,7 @@ static void *watcher_worker(void *_args){
             continue;
         }
 
-        printf("[watcher] got new event\n");
+        // printf("[watcher] got new event\n");
 
         listener_packet wpkt;
         if (0 > prot_queue_pop(&w->passed_packets, &wpkt)){
@@ -115,11 +115,11 @@ static void *watcher_worker(void *_args){
         if (w->handlers[pkt->packtype].foo){
             naddr_t addr = ln_nfd2addr(wpkt.from_who);
 
-            printf("[watcher] calling handler for %d\n", pkt->packtype);
-            printf("... [watcher] from_who: %u, %s:%u\n", wpkt.from_who.rfd, addr.ip.v4.ip, addr.ip.v4.port);
+            // printf("[watcher] calling handler for %d\n", pkt->packtype);
+            // printf("... [watcher] from_who: %u, %s:%u\n", wpkt.from_who.rfd, addr.ip.v4.ip, addr.ip.v4.port);
             w->handlers[pkt->packtype].foo(pkt, wpkt.from_who, w->sender, w->handlers[pkt->packtype].ctx);
         } else {
-            printf("[watcher] no handler set for %d\n", pkt->packtype);
+            fprintf(stderr, "[watcher] no handler set for %d\n", pkt->packtype);
         }
 
         free(pkt);
