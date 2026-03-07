@@ -8,7 +8,7 @@ typedef struct {
     dyn_table       table;
 } prot_table;
 
-prot_table prot_table_create(size_t key_size, size_t val_size, dyn_own_t flags);
+int prot_table_create(size_t key_size, size_t val_size, dyn_own_t flags, prot_table *table);
 void prot_table_lock(prot_table *table);
 void prot_table_unlock(prot_table *table);
 int prot_table_set(prot_table *table, const void *key, const void *val);

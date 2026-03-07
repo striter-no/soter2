@@ -17,6 +17,8 @@ typedef enum: uint8_t {
     PACK_ACCEPT,    // RUDP
     PACK_STATE,     // no RUDP
     PACK_RACK,      // RUDP ACK
+    PACK_HANDSHAKE_C, // RUDP, crypto
+    PACK_HANDSHAKE_S, // RUDP, crypto
     __PROTOPACK_END
 } protopack_type;
 
@@ -46,8 +48,8 @@ protopack *udp_make_pack(
     size_t    payload_size
 );
 
-protopack *udp_copy_pack(protopack *pk, bool apply_ntoh);
-protopack *retranslate_udp(protopack *pk, int to_net);
+protopack *udp_copy_pack(protopack *pk); // bool apply_ntoh
+protopack *retranslate_udp(protopack *pk);
 
 ssize_t protopack_send(
     const protopack *pack,

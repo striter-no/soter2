@@ -1,16 +1,17 @@
 #include <base/prot_array.h>
 
-prot_array prot_array_create(size_t element_size){
-    prot_array arr;
-    arr.array = dyn_array_create(element_size);
+int prot_array_create(size_t element_size, prot_array *arr){
+    if (!arr) return -1;
+    
+    arr->array = dyn_array_create(element_size);
     
     pthread_mutexattr_t attrs;
     pthread_mutexattr_init(&attrs);
     pthread_mutexattr_settype(&attrs, PTHREAD_MUTEX_RECURSIVE);
-    pthread_mutex_init(&arr.mtx, &attrs);
+    pthread_mutex_init(&arr->mtx, &attrs);
     pthread_mutexattr_destroy(&attrs);
 
-    return arr;
+    return 0;
 }
 
 void prot_array_lock(prot_array *array){

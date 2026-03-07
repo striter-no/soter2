@@ -6,7 +6,7 @@ typedef struct {
     prot_array arr;
 } prot_queue;
 
-prot_queue prot_queue_create(size_t element_size);
+int prot_queue_create(size_t element_size, prot_queue *queue);
 void prot_queue_lock(prot_queue *queue);
 void prot_queue_unlock(prot_queue *queue);
 int prot_queue_push(prot_queue *q, const void *element);

@@ -14,7 +14,7 @@ int pvd_sender_new(pvd_sender *s, ln_usocket *p_usocket){
     
     s->p_usocket = p_usocket;
     s->daemon  = 0;
-    s->packets = prot_queue_create(sizeof(pvd_sender_pack_t));
+    prot_queue_create(sizeof(pvd_sender_pack_t), &s->packets);
     atomic_store(&s->is_running, false);
 
     return 0;
@@ -49,13 +49,17 @@ int pvd_sender_start(pvd_sender *s){
 
 
 int pvd_sender_send(pvd_sender *s, protopack *packet, nnet_fd to){
+    printf("[pvd][sender] send called\n");
     if (!s || !packet) return -1;
 
-    protopack *pkt = udp_copy_pack(packet, false);
+    protopack *pkt = udp_copy_pack(packet);
     pvd_sender_pack_t ppkt = {
         .pack = pkt,
         .to   = to
     };
+
+    printf("[pvd][sender] send proceeded\n");
+    mt_evsock_notify(&s->newpack_es);
     prot_queue_push(&s->packets, &ppkt);
     free(packet);
 
@@ -68,9 +72,11 @@ static void *pvd_sender_worker(void *_args){
     while (atomic_load(&sender->is_running)){
         int r = mt_evsock_wait(&sender->newpack_es, 100);
         if (r == 0) continue;
+
+        printf("[pvd][sender] awaited %d events...\n", r);
         if (r < 0) {perror("poll()"); break;}
 
-        pvd_sender_pack_t ppkt;
+        pvd_sender_pack_t ppkt = {0};
         if (0 != prot_queue_pop(&sender->packets, &ppkt)){
             fprintf(stderr, "prot_queue_pop() somehow failed\n");
             continue;
@@ -81,8 +87,11 @@ static void *pvd_sender_worker(void *_args){
             continue;
         }
 
-        char buf[2048];
-        ssize_t s = protopack_send(ppkt.pack, buf);
+        char buf[2048] = {0};
+
+        // printf("[pvd][sender]")
+        printf("[pvd][sender] sending %u bytes as dsize: %.*s\n", ppkt.pack->d_size, ppkt.pack->d_size, ppkt.pack->data);
+        ssize_t s = protopack_send(retranslate_udp(ppkt.pack), buf);
         if (s < 0){
             fprintf(stderr, "protopack_send() failed");
             goto end;
@@ -91,6 +100,8 @@ static void *pvd_sender_worker(void *_args){
             abort();
         }
 
+        naddr_t addr = ln_nfd2addr(ppkt.to);
+        printf("[pvd][sender] sending %zd bytes to %s:%u\n", s, addr.ip.v4.ip, addr.ip.v4.port);
         ln_usock_send(sender->p_usocket, buf, s, ppkt.to);
 
 end:

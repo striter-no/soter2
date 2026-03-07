@@ -22,10 +22,13 @@ int mt_evsock_close(mt_eventsock *evsock){
     return 0;
 }
 
-
 int mt_evsock_notify(mt_eventsock *evsock){
     if (!evsock) return -1;
-    write(evsock->client_fd, &(char){1}, 1);
+    
+    char dummy = 1;
+    if (write(evsock->parent_fd, &dummy, 1) < 0) {
+        return -1;
+    }
     return 0;
 }
 
@@ -33,8 +36,12 @@ int mt_evsock_wait(mt_eventsock *evsock, int timeout){
     if (!evsock) return -1;
     
     int r = poll(&evsock->pfd, 1, timeout);
-    if (0 >= r) return r;
+    if (r <= 0) return r;
 
-    read(evsock->client_fd, &(char){1}, 1);
-    return r;
+    char dummy;
+    if (read(evsock->client_fd, &dummy, 1) < 0) {
+        return -1;
+    }
+    
+    return 1;
 }

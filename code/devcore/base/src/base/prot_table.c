@@ -1,16 +1,16 @@
 #include <base/prot_table.h>
 
-prot_table prot_table_create(size_t key_size, size_t val_size, dyn_own_t flags){
-    prot_table table;
-    table.table = dyn_table_create(key_size, val_size, flags);
+int prot_table_create(size_t key_size, size_t val_size, dyn_own_t flags, prot_table *table){
+    if (!table) return -1;
+    table->table = dyn_table_create(key_size, val_size, flags);
     
     pthread_mutexattr_t attrs;
     pthread_mutexattr_init(&attrs);
     pthread_mutexattr_settype(&attrs, PTHREAD_MUTEX_RECURSIVE);
-    pthread_mutex_init(&table.mtx, &attrs);
+    pthread_mutex_init(&table->mtx, &attrs);
     pthread_mutexattr_destroy(&attrs);
 
-    return table;
+    return 0;
 }
 
 void prot_table_lock(prot_table *table){

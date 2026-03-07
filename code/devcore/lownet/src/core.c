@@ -1,4 +1,5 @@
 #include <lownet/core.h>
+#include <stdio.h>
 #include <string.h>
 #include <stdint.h>
 #include <unistd.h>
@@ -141,7 +142,9 @@ naddr_t ln_nfd2addr(nnet_fd fd){
         return ln_make6(ln_ipv6(
             str, ntohs(ipv6->sin6_port)
         ));
-    } 
+    }
+
+    fprintf(stderr, "[lownet] nfd2addr failed, ss_family is UNKNOWN: %d\n", addr->ss_family);
     return (naddr_t){0};
 }
 

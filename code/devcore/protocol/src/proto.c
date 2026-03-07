@@ -1,4 +1,6 @@
+#include <netinet/in.h>
 #include <packproto/proto.h>
+#include <stdio.h>
 #include <string.h>
 
 static uint32_t crc32(const void *data, size_t n_bytes) {
@@ -40,43 +42,43 @@ protopack *udp_make_pack(
     memset(pack, 0, total_size);
 
     pack->chsum  = 0;
-    pack->seq    = htonl(sequence_n);
-    pack->d_size = htonl(payload_size);
-    pack->h_from = htonl(hash_from);
-    pack->h_to   = htonl(hash_to);
+    pack->seq    = sequence_n;
+    pack->d_size = payload_size;
+    pack->h_from = hash_from;
+    pack->h_to   = hash_to;
     pack->packtype = (uint8_t)(type);
     
     if (payload)
         memcpy(pack->data, payload, payload_size);
 
-    pack->chsum  = htonl(crc32(pack, total_size));
-
+    // pack->chsum  = htonl(crc32(pack, total_size));
     return pack;
 }
 
-protopack *udp_copy_pack(protopack *pk, bool apply_ntoh){
-    protopack *out = malloc(sizeof(protopack) + (apply_ntoh ? ntohl(pk->d_size): pk->d_size));
-    out->chsum    = apply_ntoh ? ntohl(pk->chsum): pk->chsum;
-    out->seq      = apply_ntoh ? ntohl(pk->seq): pk->seq;
-    out->d_size   = apply_ntoh ? ntohl(pk->d_size): pk->d_size;
-    out->h_from   = apply_ntoh ? ntohl(pk->h_from): pk->h_from;
-    out->h_to     = apply_ntoh ? ntohl(pk->h_to): pk->h_to;
+protopack *udp_copy_pack(protopack *pk){ // bool apply_ntoh
+    protopack *out = malloc(sizeof(protopack) + pk->d_size); // apply_ntoh ? ntohl(pk->d_size): pk->d_size
+    out->chsum    = pk->chsum;  /*apply_ntoh ? ntohl(pk->chsum): pk->chsum;*/
+    out->seq      = pk->seq;    /*apply_ntoh ? ntohl(pk->seq): pk->seq;*/
+    out->d_size   = pk->d_size; /*apply_ntoh ? ntohl(pk->d_size): pk->d_size;*/
+    out->h_from   = pk->h_from; /*apply_ntoh ? ntohl(pk->h_from): pk->h_from;*/
+    out->h_to     = pk->h_to;   /*apply_ntoh ? ntohl(pk->h_to): pk->h_to;*/
     out->packtype = pk->packtype;
     if (out->d_size != 0) memcpy(out->data, pk->data, out->d_size);
 
     return out;
 }
 
-protopack *retranslate_udp(protopack *pk, int to_net){
-    protopack *out = udp_copy_pack(pk, to_net == 0);
-    if (to_net){
-        out->chsum    = htonl(pk->chsum);
-        out->seq      = htonl(pk->seq);
-        out->d_size   = htonl(pk->d_size);
-        out->h_from   = htonl(pk->h_from);
-        out->h_to     = htonl(pk->h_to);
-        out->packtype = pk->packtype;
-    }
+protopack *retranslate_udp(protopack *pk){
+    protopack *out = udp_copy_pack(pk);
+    out->chsum    = 0;
+    out->seq      = htonl(pk->seq);
+    out->d_size   = htonl(pk->d_size);
+    out->h_from   = htonl(pk->h_from);
+    out->h_to     = htonl(pk->h_to);
+    out->packtype = pk->packtype;
+
+    out->chsum  = htonl(crc32(out, pk->d_size + sizeof(protopack)));
+
     return out;
 }
 
@@ -96,10 +98,11 @@ protopack *protopack_recv(
     const char raw_data[2048],
     size_t     raw_size
 ){
-    if (raw_size >= 2048) return NULL;
-    if (raw_data == NULL) return NULL;
-    if (raw_size < sizeof(protopack)) return NULL;
-
+    
+    if (raw_size >= 2048) {fprintf(stderr, "[proto][recv]: raw_size >= 2048 (%zu)\n", raw_size); return NULL;}
+    if (raw_data == NULL) {fprintf(stderr, "[proto][recv]: raw_data is NULL\n"); return NULL;}
+    if (raw_size < sizeof(protopack)) {fprintf(stderr, "[proto][recv]: raw_size < sizeof(protopack) (%zu)\n", raw_size); return NULL;}
+    
     protopack *recv_pkt = (protopack *)raw_data;
 
     uint32_t received_chsum = ntohl(recv_pkt->chsum);
@@ -107,6 +110,7 @@ protopack *protopack_recv(
     uint32_t calculated_chsum = crc32(raw_data, raw_size);
     
     if (received_chsum != calculated_chsum) {
+        fprintf(stderr, "[proto][recv]: chsum missmatch (%u != %u, %u)\n", received_chsum, calculated_chsum, ntohl(received_chsum));
         return NULL;
     }
 

@@ -2,21 +2,16 @@
 #include <stdlib.h>
 #include <watcher/system.h>
 
-typedef struct {
-    protopack *pack;
-    nnet_fd    from_who;
-} watcher_packet;
-
-int watcher_init(watcher *w, pvd_sender *sender){
-    if (!w || !sender) return -1;
+int watcher_init(watcher *w, pvd_sender *sender, pvd_listener *listener){
+    if (!w || !sender || !listener) return -1;
     
     if (0 > mt_evsock_new(&w->newpack))
         return -1;
 
-    w->passed_packets = prot_queue_create(sizeof(watcher_packet));
+    prot_queue_create(sizeof(listener_packet), &w->passed_packets);
     w->sender = sender;
     w->daemon = 0;
-    memset(w->handlers, 0, sizeof(w->handlers) / sizeof(w->handlers[0]));
+    memset(w->handlers, 0, sizeof(w->handlers));
 
     atomic_store(&w->is_running, false);
     return 0;
@@ -26,7 +21,7 @@ void watcher_end(watcher *w){
     atomic_store(&w->is_running, false);
     pthread_join(w->daemon, NULL);
 
-    watcher_packet pck;
+    listener_packet pck;
     while (0 == prot_queue_pop(&w->passed_packets, &pck)){
         if (!pck.pack) continue;
         free(pck.pack);
@@ -69,15 +64,12 @@ int watcher_handler_reg(watcher *w, uint8_t type, watcher_handler handler){
 
 int watcher_pass(watcher *w, protopack *pack, nnet_fd from_who){
     if (!w || !pack) return -1;
-
-    watcher_packet pkt = {
+    listener_packet pkt = {
         .pack = pack,
         .from_who = from_who
     };
-
     if (0 > prot_queue_push(&w->passed_packets, &pkt))
         return -1;
-
     return mt_evsock_notify(&w->newpack);
 }
 
@@ -94,7 +86,9 @@ static void *watcher_worker(void *_args){
             continue;
         }
 
-        watcher_packet wpkt;
+        printf("[watcher] got new event\n");
+
+        listener_packet wpkt;
         if (0 > prot_queue_pop(&w->passed_packets, &wpkt)){
             fprintf(stderr, "failed to pop packet at watcher worker\n");
             continue;
@@ -118,8 +112,15 @@ static void *watcher_worker(void *_args){
             continue;
         }
 
-        if (w->handlers[pkt->packtype].foo)
+        if (w->handlers[pkt->packtype].foo){
+            naddr_t addr = ln_nfd2addr(wpkt.from_who);
+
+            printf("[watcher] calling handler for %d\n", pkt->packtype);
+            printf("... [watcher] from_who: %u, %s:%u\n", wpkt.from_who.rfd, addr.ip.v4.ip, addr.ip.v4.port);
             w->handlers[pkt->packtype].foo(pkt, wpkt.from_who, w->sender, w->handlers[pkt->packtype].ctx);
+        } else {
+            printf("[watcher] no handler set for %d\n", pkt->packtype);
+        }
 
         free(pkt);
     }

@@ -19,10 +19,10 @@ int rudp_dispatcher_new(
     d->sender = s;
     d->self_uid = self_uid;
 
-    d->passed_packs   = prot_queue_create(sizeof(rudp_wrpkt));
-    d->outgoing_packs = prot_queue_create(sizeof(protopack*));
-    d->channels = prot_table_create(
-        sizeof(uint32_t), sizeof(rudp_channel), DYN_OWN_BOTH
+    prot_queue_create(sizeof(rudp_wrpkt), &d->passed_packs);
+    prot_queue_create(sizeof(rudp_wrpkt), &d->outgoing_packs);
+    prot_table_create(
+        sizeof(uint32_t), sizeof(rudp_channel*), DYN_OWN_BOTH, &d->channels
     );
 
     d->daemon = 0;
@@ -40,7 +40,7 @@ void rudp_dispatcher_end(
 
     for (size_t i = 0; i < d->channels.table.array.len; i++){
         dyn_pair *p = dyn_array_at(&d->channels.table.array, i);
-        rudp_channel_end(p->second);
+        rudp_channel_end(*((rudp_channel**)p->second));
     }
 
     for (size_t i = 0; i < d->passed_packs.arr.array.len; i++){
@@ -86,6 +86,25 @@ int rudp_dispatcher_pass(
         .pack = pack
     });
 
+    mt_evsock_notify(&d->newpack_fd);
+
+    return 0;
+}
+
+int rudp_dispatcher_send(
+    rudp_dispatcher *d,
+    protopack       *pack,
+    nnet_fd          to
+){
+    if (!d || !pack) return -1;
+
+    prot_queue_push(&d->outgoing_packs, &(rudp_wrpkt){
+        .nfd  = to,
+        .pack = pack
+    });
+
+    mt_evsock_notify(&d->outgoing_fd);
+
     return 0;
 }
 
@@ -96,16 +115,26 @@ int rudp_dispatcher_chan_new(
     uint32_t client_uid
 ){
     if (!d) return -1;
+    prot_table_lock(&d->channels);
 
-    rudp_channel c;
-    if (0 > rudp_channel_new(&c, client_nfd, client_uid))
+    rudp_channel **existing_ = prot_table_get(&d->channels, &client_uid);
+    rudp_channel *existing = existing_? *existing_: NULL;
+    
+    if (existing != NULL){
+        existing->client_nfd = client_nfd;
+        prot_table_unlock(&d->channels);
+        mt_evsock_notify(&d->newchan_fd);
+        return 0;
+    }
+
+    rudp_channel *c = malloc(sizeof(rudp_channel));
+    if (0 > rudp_channel_new(c, client_nfd, client_uid)){
+        prot_table_unlock(&d->channels);
         return -1;
+    }
 
-    prot_table_set(
-        &d->channels, 
-        &client_uid, 
-        &c
-    );
+    prot_table_set(&d->channels, &client_uid, &c);
+    prot_table_unlock(&d->channels);
 
     mt_evsock_notify(&d->newchan_fd);
     return 0;
@@ -118,10 +147,15 @@ int rudp_dispatcher_chan_get(
 ){
     if (!d) return -1;
 
-    *channel = prot_table_get(
+    // printf("[rudp_dispatcher_chan_get] before\n");
+    rudp_channel **chan = ((rudp_channel**)prot_table_get(
         &d->channels, 
         &client_uid
-    );
+    ));
+    // printf("[rudp_dispatcher_chan_get] after\n");
+
+    if (!chan || !(*chan)) return -1;
+    *channel = *chan;
 
     return 0;
 }
@@ -153,16 +187,23 @@ static void *rudp_dispatcher_worker(void *_args){
         {.fd = disp->outgoing_fd.pfd.fd, .events = POLLIN}
     };
     while (atomic_load(&disp->is_active)){
-        int r = poll(fds, 2, 100);
+        int r = poll(fds, 2, 200);
 
+        // printf("[rudp worker] check timeouts: %d\n", atomic_load(&disp->is_active));
         rudp_check_timeouts(disp);
+
+        // printf("[rudp worker] reordering\n");
         rudp_reordering(disp);
+
+        // printf("[rudp worker] workers...\n");
 
         if (r < 0)  {perror("rudp_dispactcher:poll()"); continue;}
         if (r == 0) continue;
 
-        if (fds[0].revents & POLLIN) rudp_sender_worker(disp);
-        if (fds[1].revents & POLLIN) rudp_reader_worker(disp);
+        if (fds[0].revents & POLLIN) rudp_reader_worker(disp);
+        if (fds[1].revents & POLLIN) rudp_sender_worker(disp);
+
+        // printf("[rudp worker] next iter\n");
     }
 
     return NULL;
@@ -172,7 +213,7 @@ static void rudp_reordering(rudp_dispatcher *disp){
     prot_table_lock(&disp->channels);
     for (size_t i = 0; i < disp->channels.table.array.len; i++){
         dyn_pair *p = dyn_array_at(&disp->channels.table.array, i);
-        rudp_reordering_chan(p->second);
+        rudp_reordering_chan(*((rudp_channel**)p->second));
     }
     prot_table_unlock(&disp->channels);
 }
@@ -245,7 +286,7 @@ static void rudp_check_timeouts(rudp_dispatcher *disp){
     prot_table_lock(&disp->channels);
     for (size_t i = 0; i < disp->channels.table.array.len; i++){
         dyn_pair *p = dyn_array_at(&disp->channels.table.array, i);
-        rudp_check_timeouts_chan(disp, p->second);
+        rudp_check_timeouts_chan(disp, *((rudp_channel**)p->second));
     }
     prot_table_unlock(&disp->channels);
 }
@@ -267,14 +308,14 @@ static void rudp_check_timeouts_chan(rudp_dispatcher *disp, rudp_channel *chan){
         }
 
         if (currt - pkt->timestamp >= RUDP_TIMEOUT){
-            pvd_sender_send(disp->sender, retranslate_udp(pkt->copy_pack, 1), pkt->nfd);
+            pvd_sender_send(disp->sender, pkt->copy_pack, pkt->nfd);
 
             pkt->timestamp = currt;
             pkt->retransmit_count++;
             i++;
             continue;
         } else if (pkt->retransmit_count == 0) {
-            pvd_sender_send(disp->sender, retranslate_udp(pkt->copy_pack, 1), pkt->nfd);
+            pvd_sender_send(disp->sender, pkt->copy_pack, pkt->nfd);
             chan->next_seq++;
             pkt->retransmit_count++;
         }
@@ -285,16 +326,21 @@ static void rudp_check_timeouts_chan(rudp_dispatcher *disp, rudp_channel *chan){
 }
 
 static void rudp_sender_worker(rudp_dispatcher *disp){
-    rudp_wrpkt pkt;
+    rudp_wrpkt pkt = {0};
     if (0 > prot_queue_pop(&disp->outgoing_packs, &pkt) || !pkt.pack)
         return;
 
+    naddr_t addr = ln_nfd2addr(pkt.nfd);
+    printf("[rudp_sender_worker] addr: %s:%u\n", addr.ip.v4.ip, addr.ip.v4.port);
     protopack *rpack = pkt.pack;
 
-    uint32_t peer_id = ntohl(rpack->h_to);
+    uint32_t peer_id = rpack->h_to;
     rudp_channel *chan = NULL;
     if (0 > rudp_dispatcher_chan_get(disp, peer_id, &chan)){
+        printf("[rudp_sender_worker] creating new channel\n");
         rudp_dispatcher_chan_new(disp, pkt.nfd, peer_id);
+        printf("[rudp_sender_worker] created channel\n");
+
         rudp_dispatcher_chan_get(disp, peer_id, &chan);
     }
 
@@ -302,12 +348,13 @@ static void rudp_sender_worker(rudp_dispatcher *disp){
 }
 
 static void rudp_reader_worker(rudp_dispatcher *disp){
-    rudp_wrpkt pkt;
+    rudp_wrpkt pkt = {0};
     if (0 > prot_queue_pop(&disp->passed_packs, &pkt) || !pkt.pack)
         return;
 
     rudp_channel *chan = NULL;
     if (0 > rudp_dispatcher_chan_get(disp, pkt.pack->h_from, &chan)){
+        printf("[rudp_reader_worker] created new channel\n");
         rudp_dispatcher_chan_new(disp, pkt.nfd, pkt.pack->h_from);
         rudp_dispatcher_chan_get(disp, pkt.pack->h_from, &chan);
     }
@@ -325,7 +372,7 @@ static void rudp_reader_worker(rudp_dispatcher *disp){
             disp->self_uid, rpack->h_from, seq, PACK_RACK
         ), pkt.nfd);
 
-    } else if (rpack->packtype == PACK_DATA){
+    } else if (rpack->packtype == PACK_RACK){
         prot_array_lock(&chan->pending_queue);
         
         bool was_ack = false;
@@ -334,7 +381,7 @@ static void rudp_reader_worker(rudp_dispatcher *disp){
             if (ppkt->seq != rpack->seq){ i++; continue;}
             
             chan->last_ack_received = rpack->seq;
-            free(ppkt->copy_pack);
+            // free(ppkt->copy_pack); <-- it is freed in sending place
             prot_array_remove(&chan->pending_queue, i);
             was_ack = true;
             break;

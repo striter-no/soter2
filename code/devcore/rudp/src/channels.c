@@ -16,10 +16,10 @@ int rudp_channel_new(rudp_channel *c, nnet_fd client_nfd, uint32_t client_uid){
     c->last_ack_sent     = 0;
 
     c->last_recved_seq   = UINT32_MAX;
-    c->pending_queue     = prot_array_create(sizeof(rudp_pending_pkt*));
-    c->network_queue     = prot_queue_create(sizeof(protopack*));
-    c->reorder_buffer    = prot_array_create(sizeof(protopack*));
-    c->reoredered_queue  = prot_queue_create(sizeof(protopack*));
+    prot_array_create(sizeof(rudp_pending_pkt), &c->pending_queue);
+    prot_queue_create(sizeof(protopack*), &c->network_queue);
+    prot_array_create(sizeof(protopack*), &c->reorder_buffer);
+    prot_queue_create(sizeof(protopack*), &c->reoredered_queue);
 
     return 0;
 }
@@ -58,8 +58,8 @@ int rudp_channel_pending_wait(rudp_channel *c, int timeout){
 int rudp_channel_send(rudp_channel *c, protopack *p, nnet_fd nfd){
     if (!c) return -1;
 
-    rudp_pending_pkt pkt;
-    rudp_pkt_make(&pkt, udp_copy_pack(p, true), RUDP_STATE_INITED, 0, nfd);
+    rudp_pending_pkt pkt = {0};
+    rudp_pkt_make(&pkt, udp_copy_pack(p), RUDP_STATE_INITED, 0, nfd);
     free(p);
 
     prot_array_push(&c->pending_queue, &pkt);
@@ -67,7 +67,7 @@ int rudp_channel_send(rudp_channel *c, protopack *p, nnet_fd nfd){
     return 0;
 }
 
-int rudp_channel_recv(rudp_channel *c, protopack *p){
+int rudp_channel_recv(rudp_channel *c, protopack **p){
     if (!c) return -1;
-    return prot_queue_pop(&c->reoredered_queue, &p);
+    return prot_queue_pop(&c->reoredered_queue, p);
 } 

@@ -4,7 +4,7 @@ int pvd_listener_new(pvd_listener *l, ln_usocket *p_usocket){
     if (!l || !p_usocket) return -1;
 
     l->p_usocket = p_usocket;
-    l->packets   = prot_queue_create(sizeof(void*));
+    prot_queue_create(sizeof(listener_packet), &l->packets);
     if (0 > mt_evsock_new(&l->newpack_es)){
         return -1;
     }
@@ -22,9 +22,9 @@ void pvd_listener_end(pvd_listener *l){
     mt_evsock_close(&l->newpack_es);
     l->p_usocket = NULL;
     
-    protopack *pkt;
+    listener_packet pkt;
     while (prot_queue_pop(&l->packets, &pkt) == 0){
-        if (pkt) free(pkt);
+        if (pkt.pack) free(pkt.pack);
     }
     prot_queue_end(&l->packets);
 }
@@ -39,12 +39,14 @@ int pvd_listener_start(pvd_listener *l){
     return 0;
 }
 
-protopack *pvd_next_packet(pvd_listener *l){
-    if (!l) return NULL;
+listener_packet pvd_next_packet(pvd_listener *l){
+    if (!l) return (listener_packet){0};
 
-    protopack *pack = NULL;
-    if (0 > prot_queue_pop(&l->packets, &pack)) 
-        return NULL;
+    listener_packet pack;
+    if (0 > prot_queue_pop(&l->packets, &pack)) {
+        fprintf(stderr, "nothing left in listener\n");
+        return (listener_packet){0};
+    }
 
     return pack;
 }
@@ -58,8 +60,8 @@ static void *pvd_listener_worker(void *_args){
         if (r == 0) {continue;}
         if (r < 0)  {perror("poll()"); continue;}
 
-        nnet_fd from;
-        char    buf[2048];
+        nnet_fd from = {0};
+        char    buf[2048] = {0};
         ssize_t recved = ln_usock_recv(listener->p_usocket, buf, 2048, &from);
         
         if (recved == 0) continue;
@@ -68,13 +70,16 @@ static void *pvd_listener_worker(void *_args){
             continue;
         }
 
+        naddr_t addr = ln_nfd2addr(from);
         protopack *pkt = protopack_recv(buf, recved);
         if (!pkt) {
             fprintf(stderr, "protopack_recv() failed\n");
             continue;
         }
-
-        prot_queue_push(&listener->packets, &pkt);
+        
+        listener_packet lpkt = {pkt, from};
+        printf("[pvd][listener] got new packet from %s:%u (%zu bytes): PKTTYPE: %d\n", addr.ip.v4.ip, addr.ip.v4.port, recved, pkt->packtype);
+        prot_queue_push(&listener->packets, &lpkt);
         mt_evsock_notify(&listener->newpack_es);
     }
 

@@ -10,7 +10,7 @@ typedef struct {
     pthread_mutex_t mtx;
 } prot_array;
 
-prot_array prot_array_create(size_t element_size);
+int prot_array_create(size_t element_size, prot_array *arr);
 void prot_array_lock(prot_array *array);
 void prot_array_unlock(prot_array *array);
 

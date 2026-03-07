@@ -29,7 +29,7 @@ int rudp_channel_end(rudp_channel *c);
 int rudp_channel_wait(rudp_channel *c, int timeout);
 
 int rudp_channel_send(rudp_channel *c, protopack *p, nnet_fd nfd);
-int rudp_channel_recv(rudp_channel *c, protopack *p); 
+int rudp_channel_recv(rudp_channel *c, protopack **p); 
 
 #endif
 #define RUDP_CHANNELS_H

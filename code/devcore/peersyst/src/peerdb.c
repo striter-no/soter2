@@ -1,11 +1,16 @@
 #include <peers/peerdb.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 int peers_db_init(peers_db *db){
     if (!db) return -1;
     
-    db->data = prot_table_create(
-        sizeof(uint32_t), sizeof(peer_info), DYN_OWN_BOTH
+    if (0 > mt_evsock_new(&db->statchange)){
+        return -1;
+    }
+
+    prot_table_create(
+        sizeof(uint32_t), sizeof(peer_info), DYN_OWN_BOTH, &db->data
     );
 
     return 0;
@@ -15,6 +20,7 @@ int peers_db_end(peers_db *db){
     if (!db) return -1;
     
     prot_table_end(&db->data);
+    mt_evsock_close(&db->statchange);
     return 0;
 }
 
@@ -34,10 +40,14 @@ int peers_db_remove(peers_db *db, uint32_t UID){
 
 int peers_db_get(peers_db *db, uint32_t UID, peer_info *info){
     if (!db) return -1;
+    prot_table_lock(&db->data);
     peer_info *info_ = prot_table_get(&db->data, &UID);
-    if (!info_) return -1;
-
+    if (!info_) {
+        prot_table_unlock(&db->data);
+        return -1;
+    }
     memcpy(info, info_, sizeof(*info));
+    prot_table_unlock(&db->data);
     return 0;
 }
 
@@ -67,6 +77,25 @@ int peers_db_schange(peers_db *db, uint32_t UID, peer_state new_state){
     }
 
     info->state = new_state;
+    mt_evsock_notify(&db->statchange);
+    prot_table_unlock(&db->data);
+    return 0;
+}
+
+int peers_db_unfd(peers_db *db, uint32_t UID, nnet_fd nfd){
+    if (!db) return -1;
+    prot_table_lock(&db->data);
+    
+    peer_info *info = prot_table_get(&db->data, &UID);
+    if (!info) {
+        prot_table_unlock(&db->data);
+        fprintf(stderr, "[peersdb][unfd]: failed to get info\n");
+        return -1;
+    }
+
+    info->nfd = nfd;
+    naddr_t addr = ln_nfd2addr(nfd);
+    printf("[peersdb][unfd] changed nfd to %s:%u\n", addr.ip.v4.ip, addr.ip.v4.port);
     
     prot_table_unlock(&db->data);
     return 0;
@@ -160,6 +189,33 @@ int peers_db_faddr(peers_db *db, peer_info **infos, size_t *info_sz, naddr_t add
     *info_sz = count;
     prot_table_unlock(&db->data);
     return 0;
+}
+
+int peers_db_wait(peers_db *db, uint32_t UID, peer_state state, peer_info *info){
+    while (true){
+        int r = mt_evsock_wait(&db->statchange, -1);
+        if (r == -1) return -1;
+
+        prot_table_lock(&db->data);
+        bool found = false;
+        for (size_t i =0; i < db->data.table.array.len; i++) {
+            dyn_pair *pair = dyn_array_at(&db->data.table.array, i);
+            if (!pair) continue;
+
+            uint32_t _uid; peer_info _info;
+            memcpy(&_uid, pair->first, sizeof(_uid));
+            memcpy(&_info, pair->second, sizeof(_info));
+
+            if (_uid == UID && _info.state == state){
+                memcpy(info, &_info, sizeof(_info));
+                found = true;
+                break;
+            }
+        }
+        prot_table_unlock(&db->data);
+
+        if (found) return 0; 
+    }
 }
 
 void peers_db_foreach(peers_db *db, peer_iter_fn func, void *ctx) {

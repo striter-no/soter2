@@ -4,7 +4,7 @@
 int gossip_system_init(gossip_system *g){
     if (!g) return -1;
 
-    g->gossips = prot_array_create(sizeof(gossip_entry*));
+    prot_array_create(sizeof(gossip_entry*), &g->gossips);
     return 0;
 }
 

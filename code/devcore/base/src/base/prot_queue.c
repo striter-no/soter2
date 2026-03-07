@@ -1,9 +1,10 @@
 #include <base/prot_queue.h>
 
-prot_queue prot_queue_create(size_t element_size){
-    return (prot_queue){
-        .arr = prot_array_create(element_size)
-    };
+int prot_queue_create(size_t element_size, prot_queue *queue){
+    if (!queue) return -1;
+    
+    prot_array_create(element_size, &queue->arr);
+    return 0;
 }
 
 void prot_queue_lock(prot_queue *queue){

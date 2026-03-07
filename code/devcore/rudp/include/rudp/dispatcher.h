@@ -37,6 +37,18 @@ int rudp_dispatcher_run(
     rudp_dispatcher *d
 );
 
+int rudp_dispatcher_send(
+    rudp_dispatcher *d,
+    protopack       *pack,
+    nnet_fd          to
+);
+
+int rudp_dispatcher_pass(
+    rudp_dispatcher *d,
+    protopack       *pack,
+    nnet_fd          from
+);
+
 // -- channels
 int rudp_dispatcher_chan_new(
     rudp_dispatcher *d,
