@@ -151,14 +151,13 @@ static void cycle(app_context ctx){
         free(p);
         
         protopack *r = NULL;
-        if (0 >= rudp_channel_wait(channel, 1000)){
+        if (0 >= rudp_channel_wait(channel, DEAD_DT * 1000)){
             break;
         }
         rudp_channel_recv(channel, &r);
         peers_db_utime(ctx.p_db, info.UID);
 
-        printf("got RUDP pack: %.*s\n", r->d_size, r->data);
-        printf("current chan->nextseq: %u\n\n", channel->next_seq);
+        printf("> %.*s\n", r->d_size, r->data);
         free(r);
 
         // sleep(1);

@@ -337,13 +337,14 @@ static void rudp_check_timeouts_chan(rudp_dispatcher *disp, rudp_channel *chan){
             pkt->copy_pack = NULL;
 
             dyn_array_remove(&chan->pending_queue.array, i);
+            fprintf(stderr, "[rudpdisp] retransmission cap hit\n");
             // SLOG_WARNING("[rudpdisp] retransmission cap hit");
             continue;
         }
 
         if (currt - pkt->timestamp >= RUDP_TIMEOUT){
             pvd_sender_send(disp->sender, pkt->copy_pack, pkt->nfd);
-            printf("retransmiting %d/%d", pkt->retransmit_count + 1, RUDP_RETRANSMISSION_CAP);
+            // printf("retransmiting %d/%d", pkt->retransmit_count + 1, RUDP_RETRANSMISSION_CAP);
             // free is at `if (pkt->retransmit_count >= RUDP_RETRANSMISSION_CAP) ...`
 
             pkt->timestamp = currt;
@@ -414,7 +415,7 @@ static void rudp_reader_worker(rudp_dispatcher *disp){
         protopack *msg = proto_msg_quick(
             disp->self_uid, rpack->h_from, seq, PACK_RACK
         );
-        printf("sending RACK: %u\n", seq);
+        // printf("sending RACK: %u\n", seq);
         pvd_sender_send(disp->sender, msg, pkt.nfd);
         free(msg);
 
