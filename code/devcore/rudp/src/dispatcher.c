@@ -4,6 +4,7 @@
 #include <rudp/channels.h>
 #include <rudp/packets.h>
 #include <packproto/protomsgs.h>
+#include <unistd.h>
 
 int rudp_dispatcher_new(
     rudp_dispatcher *d, 
@@ -87,6 +88,7 @@ int rudp_dispatcher_pass(
         .pack = pack
     });
 
+    // printf("!! notified newpack!\n");
     mt_evsock_notify(&d->newpack_fd);
 
     return 0;
@@ -101,9 +103,10 @@ int rudp_dispatcher_send(
 
     prot_queue_push(&d->outgoing_packs, &(rudp_wrpkt){
         .nfd  = to,
-        .pack = pack
+        .pack = udp_copy_pack(pack)
     });
 
+    // printf("!! notified outgoing!\n");
     mt_evsock_notify(&d->outgoing_fd);
 
     return 0;
@@ -121,6 +124,7 @@ int rudp_direct_send(
         .pack = udp_copy_pack(pack)
     });
 
+    // printf("!! notified outgoing!\n");
     mt_evsock_notify(&d->outgoing_fd);
 
     return 0;
@@ -199,29 +203,39 @@ static void rudp_reordering_chan(rudp_channel *chan);
 
 static void *rudp_dispatcher_worker(void *_args){
     rudp_dispatcher *disp = _args;
-    
-    struct pollfd fds[2] = {
-        {.fd = disp->newpack_fd.pfd.fd, .events = POLLIN}, 
-        {.fd = disp->outgoing_fd.pfd.fd, .events = POLLIN}
-    };
-    while (atomic_load(&disp->is_active)){
-        int r = poll(fds, 2, 200);
 
-        // printf("[rudp worker] check timeouts: %d\n", atomic_load(&disp->is_active));
+    struct pollfd fds[2] = {
+        {.fd = disp->newpack_fd.client_fd,  .events = POLLIN},
+        {.fd = disp->outgoing_fd.client_fd, .events = POLLIN}
+    };
+    while (atomic_load(&disp->is_active) || (prot_queue_len(&disp->outgoing_packs) > 0) || (prot_queue_len(&disp->passed_packs) > 0)){
+        int timeout = atomic_load(&disp->is_active) ? 10 : 0;
+        if (timeout == 0){
+            mt_evsock_notify(&disp->outgoing_fd);
+            mt_evsock_notify(&disp->newpack_fd);
+        }
+        
+        int r = poll(fds, 2, timeout);
         rudp_check_timeouts(disp);
 
-        // printf("[rudp worker] reordering\n");
-        rudp_reordering(disp);
+        if (r > 0 && (fds[0].revents & POLLIN)) {
+            rudp_reordering(disp);
+        }
 
-        // printf("[rudp worker] workers...\n");
-
-        if (r < 0)  {perror("rudp_dispactcher:poll()"); continue;}
+        if (r < 0)  {
+            perror("rudp_dispactcher:poll()");
+            continue;
+        }
         if (r == 0) continue;
 
-        if (fds[0].revents & POLLIN) rudp_reader_worker(disp);
-        if (fds[1].revents & POLLIN) rudp_sender_worker(disp);
-
-        // printf("[rudp worker] next iter\n");
+        if (fds[0].revents & POLLIN) {
+            mt_evsock_drain(&disp->newpack_fd);
+            rudp_reader_worker(disp);
+        }
+        if (fds[1].revents & POLLIN) {
+            mt_evsock_drain(&disp->outgoing_fd);
+            rudp_sender_worker(disp);
+        }
     }
 
     return NULL;
@@ -329,6 +343,7 @@ static void rudp_check_timeouts_chan(rudp_dispatcher *disp, rudp_channel *chan){
 
         if (currt - pkt->timestamp >= RUDP_TIMEOUT){
             pvd_sender_send(disp->sender, pkt->copy_pack, pkt->nfd);
+            printf("retransmiting %d/%d", pkt->retransmit_count + 1, RUDP_RETRANSMISSION_CAP);
             // free is at `if (pkt->retransmit_count >= RUDP_RETRANSMISSION_CAP) ...`
 
             pkt->timestamp = currt;
@@ -337,6 +352,7 @@ static void rudp_check_timeouts_chan(rudp_dispatcher *disp, rudp_channel *chan){
             continue;
         } else if (pkt->retransmit_count == 0) {
             pvd_sender_send(disp->sender, pkt->copy_pack, pkt->nfd);
+            printf("sending packet: %.*s\n", pkt->copy_pack->d_size, pkt->copy_pack->data);
             // free is at `if (pkt->retransmit_count >= RUDP_RETRANSMISSION_CAP) ...`
             // or in RACK cycle
 
@@ -398,7 +414,7 @@ static void rudp_reader_worker(rudp_dispatcher *disp){
         protopack *msg = proto_msg_quick(
             disp->self_uid, rpack->h_from, seq, PACK_RACK
         );
-        // printf("sending RACK: %u\n", seq);
+        printf("sending RACK: %u\n", seq);
         pvd_sender_send(disp->sender, msg, pkt.nfd);
         free(msg);
 

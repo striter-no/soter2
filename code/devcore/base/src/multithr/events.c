@@ -38,10 +38,29 @@ int mt_evsock_wait(mt_eventsock *evsock, int timeout){
     int r = poll(&evsock->pfd, 1, timeout);
     if (r <= 0) return r;
 
-    char dummy;
-    if (read(evsock->client_fd, &dummy, 1) < 0) {
-        return -1;
+    if (evsock->pfd.revents & (POLLHUP | POLLERR | POLLNVAL)) {
+        return -1; 
     }
-    
-    return 1;
+
+    if (evsock->pfd.revents & POLLIN) {
+        char buffer[256];
+        ssize_t bytes_read;
+        
+        while ((bytes_read = read(evsock->client_fd, buffer, sizeof(buffer))) > 0) {}
+        
+        if (bytes_read == 0)
+            return -1;
+    }
+
+    return r;
+}
+
+int mt_evsock_drain(mt_eventsock *evsock){
+    if (!evsock) return -1;
+    char buffer[256];
+    ssize_t bytes_read;
+    while ((bytes_read = read(evsock->client_fd, buffer, sizeof(buffer))) > 0) {
+        
+    }
+    return 0;
 }

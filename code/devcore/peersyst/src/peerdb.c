@@ -101,6 +101,21 @@ int peers_db_unfd(peers_db *db, uint32_t UID, nnet_fd nfd){
     return 0;
 }
 
+int peers_db_utime(peers_db *db, uint32_t UID){
+    if (!db) return -1;
+    
+    peer_info *info = prot_table_get(&db->data, &UID);
+    if (!info) {
+        prot_table_unlock(&db->data);
+        fprintf(stderr, "[peersdb][utime]: failed to get info\n");
+        return -1;
+    }
+
+    info->last_seen = time(NULL);
+
+    return 0;
+}
+
 // -- filtering
 int peers_db_fstate(peers_db *db, peer_info **infos, size_t *info_sz, peer_state state){
     if (!db || !infos || !info_sz) return -1;
@@ -220,9 +235,20 @@ int peers_db_wait(peers_db *db, uint32_t UID, peer_state state, peer_info *info)
 
 void peers_db_foreach(peers_db *db, peer_iter_fn func, void *ctx) {
     prot_table_lock(&db->data);
-    for (size_t i = 0; i < db->data.table.array.len; i++) {
+    for (size_t i = 0; i < db->data.table.array.len;) {
         dyn_pair *pair = dyn_array_at(&db->data.table.array, i);
-        if (pair) func((peer_info*)pair->second, ctx);
+        if (!pair) continue;
+        int r = func((peer_info*)pair->second, ctx);
+
+        if (r == 1){
+            dyn_array_remove(&db->data.table.array, i);
+            free(pair->first);
+            free(pair->second);
+            // peers_db_remove(db, ((peer_info*)pair->second)->UID);
+            continue;
+        }
+
+        i++;
     }
     prot_table_unlock(&db->data);
 }

@@ -1,10 +1,12 @@
 #include <gossip/system.h>
 #include <stdint.h>
 
-int gossip_system_init(gossip_system *g){
+int gossip_system_init(gossip_system *g, uint32_t self_uid){
     if (!g) return -1;
 
     prot_array_create(sizeof(gossip_entry*), &g->gossips);
+    g->last_gossiped = 0;
+    g->self_uid = self_uid;
     return 0;
 }
 
@@ -43,6 +45,7 @@ int gossip_cleanup(gossip_system *g){
 
 int gossip_new_entry(gossip_system *g, gossip_entry *entry){
     if (!g || !entry) return -1;
+    if (entry->uid == g->self_uid) return 0;
 
     prot_array_lock(&g->gossips);
 
@@ -77,32 +80,41 @@ int gossip_new_entry(gossip_system *g, gossip_entry *entry){
 }
 
 
-int gossip_random_entries(gossip_system *g, gossip_entry **entries, size_t n){
-    if (!g) return -1;
+int gossip_random_entries(gossip_system *g, gossip_entry ***entries, size_t *n_ptr){
+    if (!g || !n_ptr) return -1;
+    size_t n = *n_ptr;
+    
     if (n == 0) return -1;
-    if (n > g->gossips.array.len) n = g->gossips.array.len;
-
-    size_t indices[n];
-    memset(indices, 0, sizeof(size_t) * n);
-
+    
     prot_array_lock(&g->gossips);
-    for (size_t i = 0; i < n; i++){
-        bool unique;
-        do {
-            unique = true;
-            size_t rnd = rand() % g->gossips.array.len;
-            for (size_t k = 0; k < i; k++) {
-                if (rnd == indices[k]) { unique = false; break; }
-            }
-            if (unique) indices[i] = rnd;
-        } while (!unique);
+    
+    size_t len = g->gossips.array.len;
+    if (len == 0) {
+        prot_array_unlock(&g->gossips);
+        return 1;
     }
     
-    for (size_t i = 0; i < n; i++){
+    if (n > len) n = len;
+    
+    size_t *indices = malloc(len * sizeof(size_t));
+    for (size_t i = 0; i < len; i++) indices[i] = i;
+    
+    for (size_t i = 0; i < n; i++) {
+        size_t j = i + (rand() % (len - i));
+        
+        size_t tmp = indices[i];
+        indices[i] = indices[j];
+        indices[j] = tmp;
+    }
+    
+    *entries = malloc(sizeof(gossip_entry*) * n);
+    for (size_t i = 0; i < n; i++) {
         gossip_entry *entr = *(gossip_entry**)prot_array_at(&g->gossips, indices[i]);
-        gossip_entry_copy(&entries[i], entr);
+        gossip_entry_copy(&((*entries)[i]), entr);
     }
     
+    free(indices);
+    *n_ptr = n;
     prot_array_unlock(&g->gossips);
     return 0;
 }
@@ -140,7 +152,7 @@ int gossip_from_packet(gossip_system *g, protopack *pack_in){
 }
 
 
-int gossip_to_packet(gossip_system *g, gossip_entry **entries, size_t n, uint8_t **out_data, size_t *out_sz){
+int gossip_to_data(gossip_system *g, gossip_entry **entries, size_t n, uint8_t **out_data, size_t *out_sz){
     if (!g || !entries || n == 0) return -1;
 
     uint32_t entries_count = (uint32_t)n;
@@ -171,4 +183,25 @@ int gossip_entry_copy(gossip_entry **dest, gossip_entry *src){
     memcpy(*dest, src, sizeof(gossip_entry) + src->mtd_size);
 
     return 0;
+}
+
+gossip_entry *gossip_create_entry(
+    uint32_t uid,       // UID
+    uint32_t ip,        // used IP
+    uint16_t port,      // opened/used port
+
+    uint32_t mtd_size,
+    char    *metadata
+){
+    gossip_entry *out = malloc(sizeof(gossip_entry) + mtd_size);
+    out->version = 0;
+    out->timestamp = time(NULL);
+    
+    out->uid = uid;
+    out->ip = ip;
+    out->port = port;
+    out->mtd_size = mtd_size;
+
+    memcpy(out->metadata, metadata, mtd_size);
+    return out;
 }

@@ -24,6 +24,7 @@ typedef struct {
     peers_db        *p_db;
     gossip_system   *g_syst;
     pvd_listener    *listener;
+    pvd_sender      *sender;
 } app_context;
 
 typedef struct {

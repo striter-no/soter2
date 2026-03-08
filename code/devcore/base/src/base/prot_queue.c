@@ -36,6 +36,16 @@ int prot_queue_pop(prot_queue *q, void *elem){
     return 0;
 }
 
+size_t prot_queue_len(prot_queue *q){
+    if (!q) return 0;
+    
+    pthread_mutex_lock(&q->arr.mtx);
+    size_t i = q->arr.array.len;
+    pthread_mutex_unlock(&q->arr.mtx);
+
+    return i;
+}
+
 void* prot_queue_peek(prot_queue *q) {
     return prot_array_at(&q->arr, 0);
 }

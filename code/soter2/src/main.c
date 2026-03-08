@@ -1,10 +1,19 @@
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include <soter2/modules.h>
 #include <soter2/handlers.h>
 
 #include <stdio.h>
 #include <unistd.h>
+#include <time.h>
 
-static void* passer(void *_args);
+#define REPING_DT 3
+#define DEAD_DT   6
+#define GOSSIP_DT 4
+
+static void* iter(void *_args);
 static void cycle( app_context ctx );
 static void punch( app_context ctx, app_peer_info peer );
 int main(){
@@ -47,7 +56,7 @@ int main(){
     peers_db pdb;
     gossip_system gsyst;
     peers_db_init(&pdb);
-    gossip_system_init(&gsyst);
+    gossip_system_init(&gsyst, rudp_disp.self_uid);
 
     // -- running
     pvd_listener_start(&listener);
@@ -60,16 +69,17 @@ int main(){
         .p_db     = &pdb,
         .watcher  = &wtch,
         .rudp     = &rudp_disp,
-        .listener = &listener
+        .listener = &listener,
+        .sender   = &sender
     };
 
-    pthread_t passer_daemon;
-    pthread_create(&passer_daemon, NULL, passer, &ctx);
+    pthread_t iter_daemon;
+    pthread_create(&iter_daemon, NULL, iter, &ctx);
     
     cycle(ctx);
     watcher_end(&wtch);
     
-    pthread_join(passer_daemon, NULL);
+    pthread_join(iter_daemon, NULL);
 
     // Ending all systems
     rudp_dispatcher_end(&rudp_disp);
@@ -137,24 +147,41 @@ static void cycle(app_context ctx){
         snprintf(data, 8, "Hello %d", i);
 
         protopack *p = udp_make_pack(channel->next_seq, ctx.rudp->self_uid, info.UID, PACK_DATA, data, strlen(data));
-        rudp_direct_send(ctx.rudp, channel, p);
+        rudp_dispatcher_send(ctx.rudp, p, info.nfd);
         free(p);
         
         protopack *r = NULL;
-        rudp_channel_wait(channel, -1);
+        if (0 >= rudp_channel_wait(channel, 1000)){
+            break;
+        }
         rudp_channel_recv(channel, &r);
+        peers_db_utime(ctx.p_db, info.UID);
 
         printf("got RUDP pack: %.*s\n", r->d_size, r->data);
         printf("current chan->nextseq: %u\n\n", channel->next_seq);
         free(r);
+
+        // sleep(1);
     }
 }
 
-static void* passer(void *_args){
+static int ping_iter(peer_info *info, void *ctx);
+static int gossip_iter(peer_info *info, void *ctx);
+
+static void* iter(void *_args){
     app_context *ctx = _args;
 
     while (atomic_load(&ctx->watcher->is_running)){
         int r = mt_evsock_wait(&ctx->listener->newpack_es, 100);
+
+        peers_db_foreach(ctx->p_db, ping_iter, ctx);
+        if (time(NULL) - ctx->g_syst->last_gossiped >= GOSSIP_DT){
+            gossip_cleanup(ctx->g_syst);
+            
+            peers_db_foreach(ctx->p_db, gossip_iter, ctx);
+            ctx->g_syst->last_gossiped = time(NULL);
+        }
+
         if (r == 0) continue;
         if (r < 0) {
             perror("poll()");
@@ -171,5 +198,63 @@ static void* passer(void *_args){
         }
     }
 
+    return 0;
+}
+
+static int ping_iter(peer_info *info, void *ctx_){ app_context *ctx = ctx_;
+    uint32_t stamp = time(NULL);
+    // printf("for %u last_seen DT: %u\n", info->UID, stamp - info->last_seen);
+    if (stamp - info->last_seen >= DEAD_DT){
+        printf("Dead peer detected: %u\n", info->UID);
+        return 1;
+    }
+
+    if (stamp - info->last_seen >= REPING_DT){
+        // printf("pinging...\n");
+        protopack *ping = proto_msg_quick(ctx->rudp->self_uid, info->UID, 0, PACK_PING);
+        pvd_sender_send(ctx->sender, ping, info->nfd);
+        free(ping);
+
+        // info->last_seen = stamp;
+    }
+
+    return 0;
+}
+
+static int gossip_iter(peer_info *info, void *ctx_){ app_context *ctx = ctx_;
+    // we dont check dt because of 1 check in iter() daemon
+    // do not spam to all peers
+    // if (rand() % 2 == 0) return 0;
+
+    naddr_t addr = ln_nfd2addr(info->nfd);
+    gossip_entry *entry = gossip_create_entry(info->UID, ln_to_uint32(addr), addr.ip.v4.port, 0, NULL);
+    gossip_new_entry(ctx->g_syst, entry);
+    free(entry);
+
+    size_t entries_c = 5;
+    gossip_entry **entries = NULL;
+    if (1 == gossip_random_entries(ctx->g_syst, &entries, &entries_c)){
+        // no entries
+        return 0;
+    }
+
+    // printf("Gossiping to %u\n", info->UID);
+    
+    size_t   packet_dsize = 0;
+    uint8_t *packet_data = NULL;
+    gossip_to_data(ctx->g_syst, entries, entries_c, &packet_data, &packet_dsize);
+
+    protopack *gossip = udp_make_pack(
+        0, ctx->rudp->self_uid, info->UID, PACK_GOSSIP, packet_data, packet_dsize
+    );
+
+    for (size_t i = 0; i < entries_c; i++){
+        free(entries[i]);
+    }
+    free(entries);
+
+    free(packet_data);
+    pvd_sender_send(ctx->sender, gossip, info->nfd);
+    free(gossip);
     return 0;
 }
