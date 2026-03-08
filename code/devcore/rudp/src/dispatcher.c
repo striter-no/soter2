@@ -208,14 +208,10 @@ static void *rudp_dispatcher_worker(void *_args){
         {.fd = disp->newpack_fd.client_fd,  .events = POLLIN},
         {.fd = disp->outgoing_fd.client_fd, .events = POLLIN}
     };
-    while (atomic_load(&disp->is_active) || (prot_queue_len(&disp->outgoing_packs) > 0) || (prot_queue_len(&disp->passed_packs) > 0)){
-        int timeout = atomic_load(&disp->is_active) ? 10 : 0;
-        if (timeout == 0){
-            mt_evsock_notify(&disp->outgoing_fd);
-            mt_evsock_notify(&disp->newpack_fd);
-        }
+    while (atomic_load(&disp->is_active)){
+        // int timeout = atomic_load(&disp->is_active) ? 10 : 0;
         
-        int r = poll(fds, 2, timeout);
+        int r = poll(fds, 2, 10);
         rudp_check_timeouts(disp);
 
         if (r > 0 && (fds[0].revents & POLLIN)) {
