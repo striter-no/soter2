@@ -43,6 +43,12 @@ int rudp_dispatcher_send(
     nnet_fd          to
 );
 
+int rudp_direct_send(
+    rudp_dispatcher *d,
+    rudp_channel    *chan,
+    protopack       *pack
+);
+
 int rudp_dispatcher_pass(
     rudp_dispatcher *d,
     protopack       *pack,

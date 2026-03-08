@@ -85,11 +85,10 @@ int main(){
 
 static void punch(app_context ctx, app_peer_info peer){
     printf("[main] punch sended\n");
-    pvd_sender_send(
-        ctx.watcher->sender,
-        proto_msg_quick(ctx.rudp->self_uid, peer.UID, 0, PACK_PUNCH),
-        ln_netfdq(peer.addr)
-    );
+
+    protopack *punch_msg = proto_msg_quick(ctx.rudp->self_uid, peer.UID, 0, PACK_PUNCH);
+    pvd_sender_send(ctx.watcher->sender, punch_msg, ln_netfdq(peer.addr));
+    free(punch_msg);
 }
 
 static void cycle(app_context ctx){
@@ -129,20 +128,26 @@ static void cycle(app_context ctx){
     naddr_t addr = ln_nfd2addr(info.nfd);
     printf("[main] got new peer: %s:%u\n", addr.ip.v4.ip, addr.ip.v4.port);
 
-
-    protopack *p = udp_make_pack(0, ctx.rudp->self_uid, info.UID, PACK_DATA, "Hello", 5);
-    rudp_dispatcher_send(ctx.rudp, p, info.nfd);
-    
-    protopack *r = NULL;
-    rudp_dispatcher_chan_wait(ctx.rudp, -1);
-    
     rudp_channel *channel = NULL;
+    rudp_dispatcher_chan_new(ctx.rudp, info.nfd, info.UID);
     rudp_dispatcher_chan_get(ctx.rudp, info.UID, &channel);
-    rudp_channel_wait(channel, -1);
-    rudp_channel_recv(channel, &r);
 
-    printf("got RUDP pack: %.*s\n", r->d_size, r->data);
-    free(r);
+    for (int i = 0; i < 10; i++){
+        char data[8];
+        snprintf(data, 8, "Hello %d", i);
+
+        protopack *p = udp_make_pack(channel->next_seq, ctx.rudp->self_uid, info.UID, PACK_DATA, data, strlen(data));
+        rudp_direct_send(ctx.rudp, channel, p);
+        free(p);
+        
+        protopack *r = NULL;
+        rudp_channel_wait(channel, -1);
+        rudp_channel_recv(channel, &r);
+
+        printf("got RUDP pack: %.*s\n", r->d_size, r->data);
+        printf("current chan->nextseq: %u\n\n", channel->next_seq);
+        free(r);
+    }
 }
 
 static void* passer(void *_args){

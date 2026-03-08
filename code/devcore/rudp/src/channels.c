@@ -31,16 +31,24 @@ int rudp_channel_end(rudp_channel *c){
     mt_evsock_close(&c->reordered_fd);
     mt_evsock_close(&c->pending_fd);
 
-    for (size_t i = 0; i < c->network_queue.arr.array.len; i++){
-        protopack *pack;
-        prot_queue_pop(&c->network_queue, &pack);
-
-        free(pack);
+    for (size_t i = 0; i < c->pending_queue.array.len; i++) {
+        rudp_pending_pkt *ppkt = prot_array_at(&c->pending_queue, i);
+        if (ppkt->copy_pack) free(ppkt->copy_pack);
     }
+    prot_array_end(&c->pending_queue);
 
-    for (size_t i = 0; i < c->pending_queue.array.len; i++){
-        free(((rudp_pending_pkt*)prot_array_at(&c->pending_queue, i))->copy_pack);
+    protopack *pack;
+    while (0 == prot_queue_pop(&c->network_queue, &pack)) {
+        if (pack) free(pack);
     }
+    prot_queue_end(&c->network_queue);
+
+    while (0 == prot_queue_pop(&c->reoredered_queue, &pack)) {
+        if (pack) free(pack);
+    }
+    prot_queue_end(&c->reoredered_queue);
+
+    prot_array_end(&c->reorder_buffer);
 
     return 0;
 }
@@ -59,8 +67,7 @@ int rudp_channel_send(rudp_channel *c, protopack *p, nnet_fd nfd){
     if (!c) return -1;
 
     rudp_pending_pkt pkt = {0};
-    rudp_pkt_make(&pkt, udp_copy_pack(p), RUDP_STATE_INITED, 0, nfd);
-    free(p);
+    rudp_pkt_make(&pkt, udp_copy_pack(p), RUDP_STATE_INITED, p->seq, nfd);
 
     prot_array_push(&c->pending_queue, &pkt);
     mt_evsock_notify(&c->pending_fd);
@@ -69,5 +76,12 @@ int rudp_channel_send(rudp_channel *c, protopack *p, nnet_fd nfd){
 
 int rudp_channel_recv(rudp_channel *c, protopack **p){
     if (!c) return -1;
-    return prot_queue_pop(&c->reoredered_queue, p);
+    protopack *p_;
+    if (0 > prot_queue_pop(&c->reoredered_queue, &p_)){
+        return -1;
+    }
+
+    *p = udp_copy_pack(p_);
+    free(p_);
+    return 0;
 } 

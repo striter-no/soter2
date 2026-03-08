@@ -15,11 +15,9 @@ int soter2_hnd_ACK(protopack *pck, nnet_fd nfd, pvd_sender *s, void *_ctx){
 
     if (info.state == PEER_ST_INITED){
         // printf("[ack] sended PACK_ACK\n");
-        pvd_sender_send(
-            s, 
-            proto_msg_quick(ctx->rudp->self_uid, info.UID, 0, PACK_ACK),
-            info.nfd
-        );
+        protopack *msg = proto_msg_quick(ctx->rudp->self_uid, info.UID, 0, PACK_ACK);
+        pvd_sender_send(s, msg, info.nfd);
+        free(msg);
     }
 
     // peers_db_schange(ctx->p_db, info.UID, PEER_ST_HANDSHAKING);
@@ -54,11 +52,9 @@ int soter2_hnd_PUNCH(protopack *pck, nnet_fd nfd, pvd_sender *s, void *_ctx){
     }
 
     // printf("[punch] sended PACK_ACK\n");
-    pvd_sender_send(
-        s, 
-        proto_msg_quick(ctx->rudp->self_uid, info.UID, 0, PACK_ACK),
-        nfd
-    );
+    protopack *msg = proto_msg_quick(ctx->rudp->self_uid, info.UID, 0, PACK_ACK);
+    pvd_sender_send(s, msg, nfd);
+    free(msg);
 
     if (info.state == PEER_ST_NATPUNCHING)
         return 0;

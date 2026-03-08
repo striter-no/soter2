@@ -41,6 +41,7 @@ void rudp_dispatcher_end(
     for (size_t i = 0; i < d->channels.table.array.len; i++){
         dyn_pair *p = dyn_array_at(&d->channels.table.array, i);
         rudp_channel_end(*((rudp_channel**)p->second));
+        free(*((rudp_channel**)p->second));
     }
 
     for (size_t i = 0; i < d->passed_packs.arr.array.len; i++){
@@ -101,6 +102,23 @@ int rudp_dispatcher_send(
     prot_queue_push(&d->outgoing_packs, &(rudp_wrpkt){
         .nfd  = to,
         .pack = pack
+    });
+
+    mt_evsock_notify(&d->outgoing_fd);
+
+    return 0;
+}
+
+int rudp_direct_send(
+    rudp_dispatcher *d,
+    rudp_channel    *chan,
+    protopack       *pack
+){
+    if (!d || !pack) return -1;
+
+    prot_queue_push(&d->outgoing_packs, &(rudp_wrpkt){
+        .nfd  = chan->client_nfd,
+        .pack = udp_copy_pack(pack)
     });
 
     mt_evsock_notify(&d->outgoing_fd);
@@ -302,6 +320,8 @@ static void rudp_check_timeouts_chan(rudp_dispatcher *disp, rudp_channel *chan){
 
         if (pkt->retransmit_count >= RUDP_RETRANSMISSION_CAP){
             free(pkt->copy_pack);
+            pkt->copy_pack = NULL;
+
             dyn_array_remove(&chan->pending_queue.array, i);
             // SLOG_WARNING("[rudpdisp] retransmission cap hit");
             continue;
@@ -309,6 +329,7 @@ static void rudp_check_timeouts_chan(rudp_dispatcher *disp, rudp_channel *chan){
 
         if (currt - pkt->timestamp >= RUDP_TIMEOUT){
             pvd_sender_send(disp->sender, pkt->copy_pack, pkt->nfd);
+            // free is at `if (pkt->retransmit_count >= RUDP_RETRANSMISSION_CAP) ...`
 
             pkt->timestamp = currt;
             pkt->retransmit_count++;
@@ -316,6 +337,9 @@ static void rudp_check_timeouts_chan(rudp_dispatcher *disp, rudp_channel *chan){
             continue;
         } else if (pkt->retransmit_count == 0) {
             pvd_sender_send(disp->sender, pkt->copy_pack, pkt->nfd);
+            // free is at `if (pkt->retransmit_count >= RUDP_RETRANSMISSION_CAP) ...`
+            // or in RACK cycle
+
             chan->next_seq++;
             pkt->retransmit_count++;
         }
@@ -345,6 +369,7 @@ static void rudp_sender_worker(rudp_dispatcher *disp){
     }
 
     rudp_channel_send(chan, rpack, pkt.nfd);
+    free(rpack);
 }
 
 static void rudp_reader_worker(rudp_dispatcher *disp){
@@ -363,38 +388,47 @@ static void rudp_reader_worker(rudp_dispatcher *disp){
     protopack *rpack = pkt.pack;
     if (rpack->packtype == PACK_DATA){
         uint32_t seq = rpack->seq;
-        prot_queue_push(&chan->network_queue, &rpack);
+
+        protopack *copy = udp_copy_pack(rpack);
+        prot_queue_push(&chan->network_queue, &copy);
         mt_evsock_notify(&chan->network_fd);
         chan->last_ack_sent = seq;
 
         // sending auto-ack
-        pvd_sender_send(disp->sender, proto_msg_quick(
+        protopack *msg = proto_msg_quick(
             disp->self_uid, rpack->h_from, seq, PACK_RACK
-        ), pkt.nfd);
+        );
+        // printf("sending RACK: %u\n", seq);
+        pvd_sender_send(disp->sender, msg, pkt.nfd);
+        free(msg);
 
     } else if (rpack->packtype == PACK_RACK){
         prot_array_lock(&chan->pending_queue);
         
         bool was_ack = false;
+        // printf("got RACK\n");
         for (size_t i = 0; i < chan->pending_queue.array.len;){
             rudp_pending_pkt *ppkt = prot_array_at(&chan->pending_queue, i);
+            // printf("... seq: %u <-> %u\n", ppkt->seq, rpack->seq);
+            
             if (ppkt->seq != rpack->seq){ i++; continue;}
             
             chan->last_ack_received = rpack->seq;
-            // free(ppkt->copy_pack); <-- it is freed in sending place
+            if (ppkt->copy_pack)
+                free(ppkt->copy_pack);
             prot_array_remove(&chan->pending_queue, i);
             was_ack = true;
             break;
         }
 
         if (!was_ack){
-            fprintf(stderr, "[warn] ACK was recved, but no suitable SEQ was found: %u", rpack->seq);
+            fprintf(stderr, "[warn] ACK was recved, but no suitable SEQ was found: %u\n", rpack->seq);
         }
 
         prot_array_unlock(&chan->pending_queue);
-        free(rpack);
     } else {
         fprintf(stderr, "to worker passed unknown packet w/ type %d\n", rpack->packtype);
-        free(rpack);
     }
+
+    free(rpack);
 }

@@ -1,4 +1,5 @@
 #include <providers/sender.h>
+#include <time.h>
 
 struct pvd_sender_pack {
     protopack *pack;
@@ -49,7 +50,6 @@ int pvd_sender_start(pvd_sender *s){
 
 
 int pvd_sender_send(pvd_sender *s, protopack *packet, nnet_fd to){
-    // printf("[pvd][sender] send called\n");
     if (!s || !packet) return -1;
 
     protopack *pkt = udp_copy_pack(packet);
@@ -58,11 +58,8 @@ int pvd_sender_send(pvd_sender *s, protopack *packet, nnet_fd to){
         .to   = to
     };
 
-    // printf("[pvd][sender] send proceeded\n");
     mt_evsock_notify(&s->newpack_es);
     prot_queue_push(&s->packets, &ppkt);
-    free(packet);
-
     return 0;
 }
 
@@ -77,9 +74,13 @@ static void *pvd_sender_worker(void *_args){
         if (r < 0) {perror("poll()"); break;}
 
         pvd_sender_pack_t ppkt = {0};
-        if (0 != prot_queue_pop(&sender->packets, &ppkt)){
-            fprintf(stderr, "prot_queue_pop() somehow failed\n");
-            continue;
+        for (int i = 0; i < 5; i++){
+            if (0 != prot_queue_pop(&sender->packets, &ppkt))
+                goto nxt;
+            
+            break;
+            nxt:
+            nanosleep(&(struct timespec){.tv_sec = 0, .tv_nsec = 10000000}, NULL);
         }
 
         if (!ppkt.pack){
@@ -91,7 +92,10 @@ static void *pvd_sender_worker(void *_args){
 
         // printf("[pvd][sender]")
         // printf("[pvd][sender] sending %u bytes as dsize: %.*s\n", ppkt.pack->d_size, ppkt.pack->d_size, ppkt.pack->data);
-        ssize_t s = protopack_send(retranslate_udp(ppkt.pack), buf);
+        protopack *retranslated = retranslate_udp(ppkt.pack);
+        ssize_t s = protopack_send(retranslated, buf);
+        free(retranslated);
+
         if (s < 0){
             fprintf(stderr, "protopack_send() failed");
             goto end;
