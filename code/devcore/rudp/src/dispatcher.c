@@ -353,7 +353,7 @@ static void rudp_check_timeouts_chan(rudp_dispatcher *disp, rudp_channel *chan){
             continue;
         } else if (pkt->retransmit_count == 0) {
             pvd_sender_send(disp->sender, pkt->copy_pack, pkt->nfd);
-            printf("sending packet: %.*s\n", pkt->copy_pack->d_size, pkt->copy_pack->data);
+            // printf("sending packet: %.*s\n", pkt->copy_pack->d_size, pkt->copy_pack->data);
             // free is at `if (pkt->retransmit_count >= RUDP_RETRANSMISSION_CAP) ...`
             // or in RACK cycle
 
