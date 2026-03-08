@@ -66,8 +66,8 @@ int pvd_sender_send(pvd_sender *s, protopack *packet, nnet_fd to){
 static void *pvd_sender_worker(void *_args){
     pvd_sender *sender = _args;
     
-    while (atomic_load(&sender->is_running) || (prot_queue_len(&sender->packets) != 0)){
-        int timeout = atomic_load(&sender->is_running) ? 100: 0;
+    while (atomic_load(&sender->is_running)){
+        int timeout = 100;
         int r = mt_evsock_wait(&sender->newpack_es, timeout);
         if (r == 0) continue;
 

@@ -8,8 +8,9 @@
 typedef enum {
     PEER_ST_INITED,
     PEER_ST_NATPUNCHING,
-    PEER_ST_HANDSHAKING,
-    PEER_ST_ACTIVE
+    PEER_ST_ACTIVE,
+    PEER_ST_CRYPTO_HANDSHAKING,
+    PEER_ST_PROTECTED
 } peer_state;
 
 typedef struct {

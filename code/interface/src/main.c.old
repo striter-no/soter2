@@ -1,10 +1,3 @@
-#ifndef _GNU_SOURCE
-#define _GNU_SOURCE
-#endif
-
-#include <soter2/modules.h>
-#include <soter2/handlers.h>
-
 #include <stdio.h>
 #include <unistd.h>
 #include <time.h>
@@ -162,6 +155,16 @@ static void cycle(app_context ctx){
 
         // sleep(1);
     }
+
+    // draining
+    protopack *r = NULL;
+    if (0 >= rudp_channel_wait(channel, 2000))
+        return;
+    rudp_channel_recv(channel, &r);
+    peers_db_utime(ctx.p_db, info.UID);
+
+    printf("> %.*s\n", r->d_size, r->data);
+    free(r);
 }
 
 static int ping_iter(peer_info *info, void *ctx);

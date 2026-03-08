@@ -184,10 +184,17 @@ int rudp_dispatcher_chan_get(
 
 int rudp_dispatcher_chan_wait(
     rudp_dispatcher *d,
-    int timeout
+    uint32_t client_uid
 ){
     if (!d) return -1;
-    return mt_evsock_wait(&d->newchan_fd, timeout);
+    while (true){
+        int r = mt_evsock_wait(&d->newchan_fd, -1);
+        if (r <= 0) continue;
+
+        rudp_channel *chan = NULL;
+        if (0 == rudp_dispatcher_chan_get(d, client_uid, &chan))
+            return 0;
+    }
 }
 
 // -- workers

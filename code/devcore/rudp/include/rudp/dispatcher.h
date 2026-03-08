@@ -70,7 +70,7 @@ int rudp_dispatcher_chan_get(
 
 int rudp_dispatcher_chan_wait(
     rudp_dispatcher *d,
-    int timeout
+    uint32_t client_uid
 );
 
 #endif
