@@ -25,6 +25,8 @@ typedef struct {
     gossip_system   *g_syst;
     pvd_listener    *listener;
     pvd_sender      *sender;
+    
+    state_system    *ssytem;
 } app_context;
 
 typedef struct {

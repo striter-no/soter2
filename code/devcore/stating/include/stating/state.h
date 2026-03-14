@@ -1,5 +1,7 @@
 #include <lownet/udp_sock.h>
 #include <crypto/system.h>
+#include <base/prot_queue.h>
+#include <multithr/events.h>
 
 #ifndef STATESERV_DT
 #define STATESERV_DT 2
@@ -7,27 +9,46 @@
 
 #ifndef STATE_H
 
-#pragma pack(push, 1)
-typedef struct {
+typedef enum {
+    REQUEST_CONNECTION
+} state_rtype;
+
+typedef struct __attribute__((packed)) {
     uint32_t ip;
     uint16_t port;
     uint32_t uid;
     unsigned char pubkey[CRYPTO_PUBKEY_BYTES];
-} state_peer;
-#pragma pack(pop)
+    unsigned char signature[CRYPTO_SIGN_BYTES];
 
-// from net to peer
-state_peer state_info2peer(
-    naddr_t addr, 
-    uint32_t uid,
-    unsigned char pubkey[CRYPTO_PUBKEY_BYTES]
+    state_rtype type;
+    uint32_t    nonce;
+    uint32_t    timestamp;
+} state_request;
+
+typedef struct {
+    prot_queue   new_state_ans;
+    mt_eventsock new_state_fd;
+} state_system;
+
+int  state_sys_init(state_system *sys);
+void state_sys_end (state_system *sys);
+
+int state_sys_wait(state_system *sys, state_request *out, int timeout);
+int state_sys_new_ans(state_system *sys, state_request *req);
+
+state_request state_rcreate(
+    uint32_t    ip,
+    uint16_t    port,
+    uint32_t    uid,
+    state_rtype type,
+    sign        s
 );
 
-void state_peer2info(
-    state_peer peer, 
-    naddr_t *addr, 
-    uint32_t *uid, 
-    unsigned char pubkey[CRYPTO_PUBKEY_BYTES]
+state_request state_retranslate(state_request r);
+
+int state_rreceive(
+    unsigned char *data,
+    state_request *out
 );
 
 #endif

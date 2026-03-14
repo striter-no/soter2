@@ -19,6 +19,41 @@ int prot_queue_push(prot_queue *q, const void *element){
     return prot_array_push(&q->arr, element);
 }
 
+int prot_queue_upush(prot_queue *q, const void *element){
+    if (!q) return -1;
+    
+    prot_array_lock(&q->arr);
+
+    for (size_t i = 0; i < q->arr.array.len; i++){
+        if (memcmp(element, dyn_array_at(&q->arr.array, i), q->arr.array.element_size) == 0){
+            prot_array_unlock(&q->arr);
+            return 0;
+        }
+    }
+
+    prot_array_push(&q->arr, element);
+
+    prot_array_unlock(&q->arr);
+    return 0;
+}
+
+int prot_queue_rpush(prot_queue *q, const void *element){
+    if (!q) return -1;
+    
+    prot_array_lock(&q->arr);
+
+    for (size_t i = 0; i < q->arr.array.len; ){
+        if (memcmp(element, dyn_array_at(&q->arr.array, i), q->arr.array.element_size) == 0){
+            dyn_array_remove(&q->arr.array, i);
+        } else i++;
+    }
+
+    prot_array_push(&q->arr, element);
+
+    prot_array_unlock(&q->arr);
+    return 0;
+}
+
 int prot_queue_pop(prot_queue *q, void *elem){
     pthread_mutex_lock(&q->arr.mtx); 
     

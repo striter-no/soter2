@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <multithr/events.h>
 #include <stdio.h>
 #include <sys/socket.h>
@@ -46,10 +47,20 @@ int mt_evsock_wait(mt_eventsock *evsock, int timeout){
         char buffer[256];
         ssize_t bytes_read;
         
-        while ((bytes_read = read(evsock->client_fd, buffer, sizeof(buffer))) > 0) {}
+        while ((bytes_read = read(evsock->client_fd, buffer, sizeof(buffer))) > 0) {
+            // draining
+        }
         
-        if (bytes_read == 0)
+        if (bytes_read == -1) {
+            if (errno != EAGAIN && errno != EWOULDBLOCK) {
+                perror("error in mt_evsock_wait");
+                return -1;
+            }
+        }
+        
+        if (bytes_read == 0) {
             return -1;
+        }
     }
 
     return r;
@@ -59,8 +70,16 @@ int mt_evsock_drain(mt_eventsock *evsock){
     if (!evsock) return -1;
     char buffer[256];
     ssize_t bytes_read;
+    
     while ((bytes_read = read(evsock->client_fd, buffer, sizeof(buffer))) > 0) {
-        
+        // drain
     }
+    
+    // Игнорируем EAGAIN, но сообщаем о реальных ошибках
+    if (bytes_read == -1 && errno != EAGAIN && errno != EWOULDBLOCK) {
+        perror("error in mt_evsock_drain");
+        return -1;
+    }
+    
     return 0;
 }

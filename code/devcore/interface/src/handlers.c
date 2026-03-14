@@ -90,4 +90,23 @@ int soter2_hnd_GOSSIP(protopack *pck, nnet_fd nfd, pvd_sender *s, void *_ctx){
     return 0;
 }
 
-int soter2_hnd_STATE (protopack *pck, nnet_fd nfd, pvd_sender *s, void *_ctx){return -1;}
+int soter2_hnd_STATE (protopack *pck, nnet_fd nfd, pvd_sender *s, void *_ctx){
+    app_context *ctx = _ctx;
+    (void)nfd;
+    (void)s;
+
+    state_request req;
+    if (0 > state_rreceive(pck->data, &req)){
+        return -1;
+    }
+
+    uint32_t dt = time(NULL) - req.timestamp;
+    if (dt >= 30){
+        fprintf(stderr, "[hnd][state] rejecting peer, too old (delta: %u)\n", dt);
+        return -1;
+    }
+
+    printf("[hnd][state] new peer: %u\n", req.uid);
+    state_sys_new_ans(ctx->ssytem, &req);
+    return 0;
+}

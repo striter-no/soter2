@@ -1,29 +1,122 @@
+#include <sodium/randombytes.h>
 #include <stating/state.h>
 #include <string.h>
 
-state_peer state_info2peer(
-    naddr_t addr, 
-    uint32_t uid,
-    unsigned char pubkey[CRYPTO_PUBKEY_BYTES]
-){
-    state_peer state = {
-        .ip   = ln_to_uint32(addr),
-        .port = addr.ip.v4.port,
-        .uid  = uid
-    };
-    memcpy(state.pubkey, pubkey, CRYPTO_PUBKEY_BYTES);
+int state_sys_init(state_system *sys){
+    if (!sys) return -1;
 
-    return state;
+    if (0 > mt_evsock_new(&sys->new_state_fd))
+        return -1;
+
+    prot_queue_create(sizeof(state_request), &sys->new_state_ans);
+    return 0;
 }
 
-void state_peer2info(
-    state_peer peer, 
-    naddr_t *addr, 
-    uint32_t *uid, 
-    unsigned char pubkey[CRYPTO_PUBKEY_BYTES]
+void state_sys_end (state_system *sys){
+    if (!sys) return;
+
+    mt_evsock_close(&sys->new_state_fd);
+    prot_queue_end(&sys->new_state_ans);
+}
+
+int state_sys_new_ans(state_system *sys, state_request *req){
+    if (!sys || !req) return -1;
+
+    prot_queue_push(&sys->new_state_ans, req);
+    mt_evsock_notify(&sys->new_state_fd);
+    return 0;
+}
+
+int state_sys_wait(state_system *sys, state_request *out, int timeout){
+    if (!sys || !out) return -1;
+    if (0 == mt_evsock_wait(&sys->new_state_fd, timeout)) 
+        return 0;
+
+    prot_queue_pop(&sys->new_state_ans, out);
+    return 1;
+}
+
+state_request state_rcreate(
+    uint32_t    ip,
+    uint16_t    port,
+    uint32_t    uid,
+    state_rtype type,
+    sign        s
 ){
-    *addr = ln_from_uint32(peer.ip, peer.port);
-    *uid  = peer.uid;
-    if (pubkey)
-        memcpy(pubkey, peer.pubkey, CRYPTO_PUBKEY_BYTES);
+    state_request req;
+    memset(&req, 0, sizeof(req));
+
+    req.ip    = htonl(ip);
+    req.port  = htons(port);
+    req.uid   = htonl(uid);
+    req.nonce = htonl(randombytes_random());
+    req.type  = (uint8_t)(type);
+    req.timestamp = htonl(time(NULL));
+    memcpy(req.pubkey, s.id_pub, CRYPTO_PUBKEY_BYTES);
+
+    uint8_t sign_buff[128] = {0};
+    size_t  offset = 0;
+
+    memcpy(sign_buff + offset, &req.nonce, sizeof(req.nonce)); offset += sizeof(req.nonce);
+    memcpy(sign_buff + offset, &req.ip, sizeof(req.ip)); offset += sizeof(req.ip);
+    memcpy(sign_buff + offset, &req.port, sizeof(req.port)); offset += sizeof(req.port);
+    memcpy(sign_buff + offset, &req.uid, sizeof(req.uid)); offset += sizeof(req.uid);
+    memcpy(sign_buff + offset, &req.type, sizeof(req.type)); offset += sizeof(req.type);
+    memcpy(sign_buff + offset, &req.timestamp, sizeof(req.timestamp)); offset += sizeof(req.timestamp);
+    memcpy(sign_buff + offset, req.pubkey, CRYPTO_PUBKEY_BYTES);
+
+    sign_data(&s, sign_buff, sizeof(sign_buff), req.signature);
+    return req;
+}
+
+int state_rreceive(
+    unsigned char *data,
+    state_request *out
+){
+    state_request req;
+    memcpy(&req, data, sizeof(req));
+    
+    uint8_t sign_buff[128] = {0};
+    size_t  offset = 0;
+
+    memcpy(sign_buff + offset, &req.nonce, sizeof(req.nonce)); offset += sizeof(req.nonce);
+    memcpy(sign_buff + offset, &req.ip, sizeof(req.ip)); offset += sizeof(req.ip);
+    memcpy(sign_buff + offset, &req.port, sizeof(req.port)); offset += sizeof(req.port);
+    memcpy(sign_buff + offset, &req.uid, sizeof(req.uid)); offset += sizeof(req.uid);
+    memcpy(sign_buff + offset, &req.type, sizeof(req.type)); offset += sizeof(req.type);
+    memcpy(sign_buff + offset, &req.timestamp, sizeof(req.timestamp)); offset += sizeof(req.timestamp);
+    memcpy(sign_buff + offset, req.pubkey, CRYPTO_PUBKEY_BYTES);
+
+    if (0 > sign_verify(sign_buff, sizeof(sign_buff), req.signature, req.pubkey)){
+        fprintf(stderr, "[state_rx] sign verification failed\n");
+        return -1;
+    }
+
+    req.ip    = ntohl(req.ip);
+    req.port  = ntohs(req.port);
+    req.uid   = ntohl(req.uid);
+    req.nonce = ntohl(req.nonce);
+    req.timestamp = ntohl(req.timestamp);
+
+    if (!crypto_pubkey_and_uid_check(req.pubkey, req.uid)){
+        fprintf(stderr, "[state_rr] pubkey & uid missmatch\n");
+        return -1;
+    }
+
+    memcpy(out, &req, sizeof(req));
+    return 0;
+}
+
+state_request state_retranslate(state_request req){
+    state_request o;
+    o.ip    = htonl(req.ip);
+    o.port  = htons(req.port);
+    o.uid   = htonl(req.uid);
+    o.nonce = htonl(req.nonce);
+    o.timestamp = htonl(req.timestamp);
+    o.type = req.type;
+    memcpy(o.pubkey, req.pubkey, CRYPTO_PUBKEY_BYTES);
+    memcpy(o.signature, req.signature, CRYPTO_SIGN_BYTES);
+
+    return o;
 }

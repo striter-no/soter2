@@ -8,8 +8,8 @@ sign sign_gen(){
 }
 
 int sign_data(
-    sign *sgn,
-    unsigned char *msg_to_sign,
+    const sign *sgn, // just for id_sec (no id_pub used)
+    const unsigned char *msg_to_sign,
     size_t         msg_len,
     unsigned char  out_signature[crypto_sign_BYTES]
 ){
@@ -21,19 +21,19 @@ int sign_data(
 }
 
 int sign_verify(
-    unsigned char *msg_signed,
+    const unsigned char *msg_signed,
     size_t         msg_len,
-    unsigned char  in_signature[crypto_sign_BYTES],
-    unsigned char  pub_key     [crypto_sign_PUBLICKEYBYTES]
+    const unsigned char  in_signature[crypto_sign_BYTES],
+    const unsigned char  pub_key     [crypto_sign_PUBLICKEYBYTES]
 ){
-    return crypto_sign_verify_detached(in_signature, msg_signed, msg_len, pub_key) == 0;
+    return crypto_sign_verify_detached(in_signature, msg_signed, msg_len, pub_key);
 }
 
 int sign_store(const sign *kp, const char *path){
     FILE *f = fopen(path, "w");
     if (!f) return -1;
 
-    if (sizeof(*kp) != fwrite(kp, sizeof(*kp), 1, f)){
+    if (1 != fwrite(kp, sizeof(*kp), 1, f)){
         fclose(f);
         return -1;
     }
@@ -46,7 +46,7 @@ int sign_load(sign *kp, const char *path){
     FILE *f = fopen(path, "r");
     if (!f) return -1;
     
-    if (fread(kp, sizeof(*kp), 1, f) != sizeof(*kp)){
+    if (fread(kp, sizeof(*kp), 1, f) != 1){
         fclose(f);
         return -1;
     }

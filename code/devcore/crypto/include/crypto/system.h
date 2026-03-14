@@ -1,6 +1,7 @@
 #include <sodium.h>
 #include "keys.h"
 #include "signing.h"
+#include "handshaking.h"
 
 #ifndef CRYPTO_SYSTEM_H
 

@@ -18,6 +18,7 @@ int prot_array_push(prot_array *array, const void *element);
 size_t prot_array_index(prot_array *array, const void *element);
 
 void *prot_array_at(prot_array *array, size_t index);
+void prot_array_filter(prot_array *array, int (*ffunc)(size_t inx, void *elem, void *ctx), void *ctx);
 
 int prot_array_remove(prot_array *array, size_t index);
 int prot_array_count(prot_array *array, const void *element);

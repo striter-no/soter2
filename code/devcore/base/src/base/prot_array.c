@@ -57,6 +57,22 @@ void *prot_array_at(prot_array *array, size_t index){
     return r;
 }
 
+void prot_array_filter(prot_array *array, int (*ffunc)(size_t inx, void *elem, void *ctx), void *ctx){
+    if (!array) return;
+
+    pthread_mutex_lock(&array->mtx);
+    
+    size_t offset = 0;
+    for (size_t i = 0; i < array->array.len; ){
+        if (1 == ffunc(offset + i, dyn_array_at(&array->array, i), ctx)){
+            dyn_array_remove(&array->array, i);
+            offset++;
+        } else i++;
+    }
+    
+    pthread_mutex_unlock(&array->mtx);
+}
+
 int prot_array_remove(prot_array *array, size_t index){
     if (!array) return -1;
 
