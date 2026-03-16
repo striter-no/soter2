@@ -77,23 +77,23 @@ int peers_db_schange(peers_db *db, uint32_t UID, peer_state new_state){
     }
 
     info->state = new_state;
-    mt_evsock_notify(&db->statchange);
     prot_table_unlock(&db->data);
+    mt_evsock_notify(&db->statchange);
     return 0;
 }
 
-int peers_db_unfd(peers_db *db, uint32_t UID, nnet_fd nfd){
+int peers_db_unfd(peers_db *db, uint32_t UID, nnet_fd *nfd){
     if (!db) return -1;
     prot_table_lock(&db->data);
     
     peer_info *info = prot_table_get(&db->data, &UID);
     if (!info) {
         prot_table_unlock(&db->data);
-        fprintf(stderr, "[peersdb][unfd]: failed to get info\n");
+        // fprintf(stderr, "[peersdb][unfd]: failed to get info\n");
         return -1;
     }
 
-    info->nfd = nfd;
+    info->nfd = *nfd;
     // naddr_t addr = ln_nfd2addr(nfd);
     // printf("[peersdb][unfd] changed nfd to %s:%u\n", addr.ip.v4.ip, addr.ip.v4.port);
     
@@ -107,11 +107,11 @@ int peers_db_utime(peers_db *db, uint32_t UID){
     peer_info *info = prot_table_get(&db->data, &UID);
     if (!info) {
         prot_table_unlock(&db->data);
-        fprintf(stderr, "[peersdb][utime]: failed to get info\n");
+        // fprintf(stderr, "[peersdb][utime]: failed to get info\n");
         return -1;
     }
 
-    info->last_seen = time(NULL);
+    info->last_seen = mt_time_get_seconds();
 
     return 0;
 }
@@ -161,7 +161,7 @@ int peers_db_fstate(peers_db *db, peer_info **infos, size_t *info_sz, peer_state
     return 0;
 }
 
-int peers_db_faddr(peers_db *db, peer_info **infos, size_t *info_sz, naddr_t addr){
+int peers_db_faddr(peers_db *db, peer_info **infos, size_t *info_sz, naddr_t *addr){
     if (!db || !infos || !info_sz) return -1;
     
     prot_table_lock(&db->data);
@@ -176,7 +176,8 @@ int peers_db_faddr(peers_db *db, peer_info **infos, size_t *info_sz, naddr_t add
 
         peer_info *info = pair->second;
         
-        if (ln_addrcmp(addr, ln_nfd2addr(info->nfd))) count++;
+        naddr_t n = ln_nfd2addr(&info->nfd);
+        if (ln_addrcmp(addr, &n)) count++;
     }
 
     if (count == 0) {
@@ -196,7 +197,8 @@ int peers_db_faddr(peers_db *db, peer_info **infos, size_t *info_sz, naddr_t add
         if (!pair) continue;
 
         peer_info *info = pair->second;
-        if (ln_addrcmp(addr, ln_nfd2addr(info->nfd))){
+        naddr_t n = ln_nfd2addr(&info->nfd);
+        if (ln_addrcmp(addr, &n)){
             (*infos)[idx++] = *info;
         }
     }
@@ -210,6 +212,7 @@ int peers_db_wait(peers_db *db, uint32_t UID, peer_state state, peer_info *info)
     while (true){
         int r = mt_evsock_wait(&db->statchange, -1);
         if (r == -1) return -1;
+        mt_evsock_drain(&db->statchange);
 
         prot_table_lock(&db->data);
         bool found = false;
@@ -237,14 +240,22 @@ void peers_db_foreach(peers_db *db, peer_iter_fn func, void *ctx) {
     prot_table_lock(&db->data);
     for (size_t i = 0; i < db->data.table.array.len;) {
         dyn_pair *pair = dyn_array_at(&db->data.table.array, i);
-        if (!pair) continue;
+        
+        if (!pair) {
+            i++; 
+            continue; 
+        }
+        
         int r = func((peer_info*)pair->second, ctx);
 
         if (r == 1){
+            void *key_to_free = pair->first;
+            void *val_to_free = pair->second;
+            
             dyn_array_remove(&db->data.table.array, i);
-            free(pair->first);
-            free(pair->second);
-            // peers_db_remove(db, ((peer_info*)pair->second)->UID);
+            
+            free(key_to_free);
+            free(val_to_free);
             continue;
         }
 

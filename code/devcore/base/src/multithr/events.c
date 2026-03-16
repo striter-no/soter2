@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <multithr/events.h>
+#include <multithr/time.h>
 #include <stdio.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -37,28 +38,31 @@ int mt_evsock_wait(mt_eventsock *evsock, int timeout){
     if (!evsock) return -1;
     
     int r = poll(&evsock->pfd, 1, timeout);
-    if (r <= 0) return r;
+    if (r <= 0) {
+        if (r < 0) perror("poll error in mt_evsock_wait");
+        return r;
+    }
 
     if (evsock->pfd.revents & (POLLHUP | POLLERR | POLLNVAL)) {
-        return -1; 
+        fprintf(stderr, "[mt_evsock_wait] poll revents: 0x%x\n", evsock->pfd.revents);
+        return -1;
     }
 
     if (evsock->pfd.revents & POLLIN) {
         char buffer[256];
         ssize_t bytes_read;
         
-        while ((bytes_read = read(evsock->client_fd, buffer, sizeof(buffer))) > 0) {
-            // draining
-        }
+        while ((bytes_read = read(evsock->client_fd, buffer, sizeof(buffer))) > 0) {}
         
         if (bytes_read == -1) {
             if (errno != EAGAIN && errno != EWOULDBLOCK) {
-                perror("error in mt_evsock_wait");
+                perror("read error in mt_evsock_wait");
                 return -1;
             }
         }
         
         if (bytes_read == 0) {
+            fprintf(stderr, "[mt_evsock_wait] EOF on event socket\n");
             return -1;
         }
     }
@@ -71,11 +75,8 @@ int mt_evsock_drain(mt_eventsock *evsock){
     char buffer[256];
     ssize_t bytes_read;
     
-    while ((bytes_read = read(evsock->client_fd, buffer, sizeof(buffer))) > 0) {
-        // drain
-    }
+    while ((bytes_read = read(evsock->client_fd, buffer, sizeof(buffer))) > 0) {}
     
-    // Игнорируем EAGAIN, но сообщаем о реальных ошибках
     if (bytes_read == -1 && errno != EAGAIN && errno != EWOULDBLOCK) {
         perror("error in mt_evsock_drain");
         return -1;

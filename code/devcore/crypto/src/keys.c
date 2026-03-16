@@ -1,4 +1,5 @@
 #include <crypto/keys.h>
+#include <stdio.h>
 #include <string.h>
 
 crypto_keypair crypto_keypair_make(){
@@ -9,6 +10,7 @@ crypto_keypair crypto_keypair_make(){
 }
 
 uint32_t crypto_pubkey_to_uid(const unsigned char *pubkey){
+    if (!pubkey) fprintf(stderr, "[crypto][pub2uid] warning: pubkey is NULL\n");
     unsigned char hash[crypto_hash_sha256_BYTES];
     crypto_hash_sha256(hash, pubkey, crypto_kx_PUBLICKEYBYTES);
     
@@ -47,6 +49,7 @@ int crypto_keypair_load(crypto_keypair *kp, const char *path){
     return 0;
 }
 
+// to base 64
 char* crypto_encode_pubkey_uid(const uint8_t pubkey[32], uint32_t uid) {
     if (pubkey == NULL) return NULL;
 
@@ -72,6 +75,7 @@ char* crypto_encode_pubkey_uid(const uint8_t pubkey[32], uint32_t uid) {
     return b64_str;
 }
 
+// from base 64
 int crypto_decode_pubkey_uid(const char* b64_str, uint8_t out_pubkey[32], uint32_t* out_uid) {
     if (b64_str == NULL || out_pubkey == NULL || out_uid == NULL) return -1;
 

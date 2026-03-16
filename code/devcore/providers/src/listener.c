@@ -17,6 +17,8 @@ int pvd_listener_new(pvd_listener *l, ln_usocket *p_usocket){
 
 void pvd_listener_end(pvd_listener *l){
     if (!l) return;
+
+    printf("listener end\n");
     atomic_store(&l->is_running, false);
     pthread_join(l->daemon, NULL);
 
@@ -56,13 +58,14 @@ listener_packet pvd_next_packet(pvd_listener *l){
 static void *pvd_listener_worker(void *_args){
     pvd_listener *listener = _args;
     
+    nnet_fd from = {0};
+    char    buf[2048] = {0};
     while (atomic_load(&listener->is_running)){
-        int r = ln_wait_netfd(listener->p_usocket->fd, POLLIN, 100);
+        int r = ln_wait_netfd(&listener->p_usocket->fd, POLLIN, 100);
         if (r == 0) {continue;}
         if (r < 0)  {perror("poll()"); continue;}
 
-        nnet_fd from = {0};
-        char    buf[2048] = {0};
+        
         ssize_t recved = ln_usock_recv(listener->p_usocket, buf, 2048, &from);
         
         if (recved == 0) continue;
@@ -71,7 +74,7 @@ static void *pvd_listener_worker(void *_args){
             continue;
         }
 
-        naddr_t addr = ln_nfd2addr(from);
+        naddr_t addr = ln_nfd2addr(&from);
         protopack *pkt = protopack_recv(buf, recved);
         if (!pkt) {
             fprintf(stderr, "protopack_recv() failed\n");

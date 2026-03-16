@@ -39,13 +39,13 @@ naddr_t ln_make6(naddr_ipv6 ipv6){
     };
 }
 
-bool ln_addrcmp(naddr_t a, naddr_t b){
-    if (a.t != b.t) return false;
-    if (a.t == nADDR_IPV4){
-        return a.ip.v4.port == b.ip.v4.port && (strcmp(a.ip.v4.ip, b.ip.v4.ip) == 0);
+bool ln_addrcmp(naddr_t *a, naddr_t *b){
+    if (a->t != b->t) return false;
+    if (a->t == nADDR_IPV4){
+        return a->ip.v4.port == b->ip.v4.port && (strcmp(a->ip.v4.ip, b->ip.v4.ip) == 0);
     }
 
-    return a.ip.v6.port == b.ip.v6.port && (strcmp(a.ip.v6.ip, b.ip.v6.ip) == 0);
+    return a->ip.v6.port == b->ip.v6.port && (strcmp(a->ip.v6.ip, b->ip.v6.ip) == 0);
 }
 
 // NOTICE: port IS NOT set (== 0) after operation
@@ -85,13 +85,13 @@ int ln_resolve(const char *domain, naddr_t *output){
 }
 
 // NOTICE: fd IS NOT set (== -1), only address
-int ln_netfd(naddr_t addr, nnet_fd *out){
-    switch (addr.t){
+int ln_netfd(naddr_t *addr, nnet_fd *out){
+    switch (addr->t){
         case nADDR_IPV4:{
             struct sockaddr_in *ipv4 = (struct sockaddr_in *)&out->addr;
-            if (inet_pton(AF_INET, addr.ip.v4.ip, &(ipv4->sin_addr)) == 1) {
+            if (inet_pton(AF_INET, addr->ip.v4.ip, &(ipv4->sin_addr)) == 1) {
                 ipv4->sin_family = AF_INET;
-                ipv4->sin_port = htons(addr.ip.v4.port);
+                ipv4->sin_port = htons(addr->ip.v4.port);
                 out->addr_len = sizeof(struct sockaddr_in);
                 return 0;
             }
@@ -100,9 +100,9 @@ int ln_netfd(naddr_t addr, nnet_fd *out){
         
         case nADDR_IPV6:{
             struct sockaddr_in6 *ipv6 = (struct sockaddr_in6 *)&out->addr;
-            if (inet_pton(AF_INET6, addr.ip.v6.ip, &(ipv6->sin6_addr)) == 1) {
+            if (inet_pton(AF_INET6, addr->ip.v6.ip, &(ipv6->sin6_addr)) == 1) {
                 ipv6->sin6_family = AF_INET6;
-                ipv6->sin6_port = htons(addr.ip.v6.port);
+                ipv6->sin6_port = htons(addr->ip.v6.port);
                 out->addr_len = sizeof(struct sockaddr_in6);
                 return 0;
             }
@@ -124,10 +124,10 @@ naddr_t ln_resolveq(const char *domain, unsigned int port){
     return addr;
 }
 
-naddr_t ln_nfd2addr(nnet_fd fd){
+naddr_t ln_nfd2addr(nnet_fd *fd){
     static char str[INET6_ADDRSTRLEN];
     
-    struct sockaddr_storage *addr = &fd.addr;
+    struct sockaddr_storage *addr = &fd->addr;
 
     if (addr->ss_family == AF_INET) {
         struct sockaddr_in *ipv4 = (struct sockaddr_in *)addr;
@@ -148,7 +148,7 @@ naddr_t ln_nfd2addr(nnet_fd fd){
     return (naddr_t){0};
 }
 
-nnet_fd ln_netfdq(naddr_t addr){
+nnet_fd ln_netfdq(naddr_t *addr){
     nnet_fd out;
     memset(&out, 0, sizeof(out));
     ln_netfd(addr, &out);
@@ -166,8 +166,8 @@ naddr_t ln_domain(const char *domain, unsigned port){
     return output;
 }
 
-int ln_wait_netfd(nnet_fd fd, int events, int timeout){
-    struct pollfd fds[1] = {{.fd = fd.rfd, .events = events}};
+int ln_wait_netfd(nnet_fd *fd, int events, int timeout){
+    struct pollfd fds[1] = {{.fd = fd->rfd, .events = events}};
     return poll(fds, 1, timeout);
 }
 
@@ -185,11 +185,11 @@ naddr_t ln_from_uint32(uint32_t ip_bin, uint16_t port) {
     return addr;
 }
 
-uint32_t ln_to_uint32(naddr_t addr) {
-    if (addr.t != nADDR_IPV4) return 0;
+uint32_t ln_to_uint32(naddr_t *addr) {
+    if (addr->t != nADDR_IPV4) return 0;
 
     uint32_t ip_bin;
-    if (inet_pton(AF_INET, addr.ip.v4.ip, &ip_bin) <= 0) {
+    if (inet_pton(AF_INET, addr->ip.v4.ip, &ip_bin) <= 0) {
         return 0;
     }
     
@@ -241,11 +241,11 @@ static uint32_t murmurhash3_32(const char* key, uint32_t len, uint32_t seed) {
     return h;
 }
 
-uint32_t ln_nfd2hash(nnet_fd fd){
+uint32_t ln_nfd2hash(nnet_fd *fd){
     char data[sizeof(uint32_t) + sizeof(uint16_t)] = {0};
     
     naddr_t addr = ln_nfd2addr(fd);
-    memcpy(data, &(uint32_t){ln_to_uint32(addr)}, sizeof(uint32_t));
+    memcpy(data, &(uint32_t){ln_to_uint32(&addr)}, sizeof(uint32_t));
     memcpy(data + sizeof(uint32_t), &addr.ip.v4.port, sizeof(uint16_t));
 
     return murmurhash3_32(

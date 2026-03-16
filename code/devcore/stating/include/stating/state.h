@@ -2,6 +2,7 @@
 #include <crypto/system.h>
 #include <base/prot_queue.h>
 #include <multithr/events.h>
+#include <multithr/time.h>
 
 #ifndef STATESERV_DT
 #define STATESERV_DT 2

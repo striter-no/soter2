@@ -1,5 +1,6 @@
 #include <base/prot_table.h>
 #include <multithr/events.h>
+#include <multithr/time.h>
 #include <lownet/core.h>
 #include <stdint.h>
 
@@ -37,11 +38,11 @@ int  peers_db_get   (peers_db *db, uint32_t UID, peer_info *info);
 bool peers_db_check  (peers_db *db, uint32_t UID);
 bool peers_db_scheck (peers_db *db, uint32_t UID, peer_state state);
 int  peers_db_schange(peers_db *db, uint32_t UID, peer_state new_state);
-int  peers_db_unfd   (peers_db *db, uint32_t UID, nnet_fd nfd);
+int  peers_db_unfd   (peers_db *db, uint32_t UID, nnet_fd *nfd);
 int  peers_db_utime  (peers_db *db, uint32_t UID);
 
 int  peers_db_fstate(peers_db *db, peer_info **infos, size_t *info_sz, peer_state state);
-int  peers_db_faddr (peers_db *db, peer_info **infos, size_t *info_sz, naddr_t    addr);
+int  peers_db_faddr (peers_db *db, peer_info **infos, size_t *info_sz, naddr_t    *addr);
 
 // UINT32_MAX for waiting any new updates
 int  peers_db_wait  (peers_db *db, uint32_t UID, peer_state state, peer_info *got_info);

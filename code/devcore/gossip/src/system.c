@@ -1,4 +1,5 @@
 #include <gossip/system.h>
+#include <multithr/time.h>
 #include <stdint.h>
 
 int gossip_system_init(gossip_system *g, uint32_t self_uid){
@@ -25,7 +26,7 @@ int gossip_system_end(gossip_system *g){
 int gossip_cleanup(gossip_system *g){
     if (!g) return -1;
 
-    uint32_t curr_timestamp = time(NULL);
+    uint32_t curr_timestamp = mt_time_get_seconds();
     prot_array_lock(&g->gossips);
     for (size_t i = 0; i < g->gossips.array.len;){
         gossip_entry *entr = *(gossip_entry**)prot_array_at(&g->gossips, i);
@@ -195,7 +196,7 @@ gossip_entry *gossip_create_entry(
 ){
     gossip_entry *out = malloc(sizeof(gossip_entry) + mtd_size);
     out->version = 0;
-    out->timestamp = time(NULL);
+    out->timestamp = mt_time_get_seconds();
     
     out->uid = uid;
     out->ip = ip;

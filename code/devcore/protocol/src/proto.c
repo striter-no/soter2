@@ -3,6 +3,17 @@
 #include <stdio.h>
 #include <string.h>
 
+const char *PROTOPACK_TYPES_CHAR[] = {
+    "PACK_DATA",
+    "PACK_ACK",
+    "PACK_PING",
+    "PACK_PONG",
+    "PACK_PUNCH",
+    "PACK_GOSSIP",
+    "PACK_STATE",
+    "PACK_RACK"
+};
+
 static uint32_t crc32(const void *data, size_t n_bytes) {
     uint32_t crc = 0xFFFFFFFF;
     const uint8_t *byte_ptr = (const uint8_t *)data;
@@ -19,9 +30,9 @@ static uint32_t crc32(const void *data, size_t n_bytes) {
 bool udp_is_RUDP_req(protopack_type type){
     switch (type) {
         case PACK_DATA:      return true;
-        case PACK_HELLO:     return true;
-        case PACK_REJECT:    return true;
-        case PACK_ACCEPT:    return true;
+        // case PACK_HELLO:     return true;
+        // case PACK_REJECT:    return true;
+        // case PACK_ACCEPT:    return true;
         case PACK_RACK:      return true;
         default:                 return false;
     }

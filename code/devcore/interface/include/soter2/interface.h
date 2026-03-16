@@ -21,6 +21,10 @@
 #define SOTER_GOSSIP_DT 10
 #endif
 
+#ifndef SOTER_LOW_PACKET_RATE
+#define SOTER_LOW_PACKET_RATE 0.5
+#endif
+
 typedef struct {
     naddr_t    state_serv;
     int        state_req_dt;
@@ -43,6 +47,12 @@ typedef struct {
     app_context     ctx;
     pthread_t       iter_daemon;
     atomic_bool     is_running;
+
+    int64_t         packets_timestamp;
+    uint32_t        packets_translated;
+    float           packet_rate;
+
+    pthread_mutex_t rate_mtx;
 } soter2_interface;
 
 typedef struct {
@@ -54,7 +64,7 @@ typedef struct {
     watcher_handler STATE;
 } soter2_ivtable;
 
-int soter2_intr_init(soter2_interface *intr);
+int  soter2_intr_init          (soter2_interface *intr);
 void soter2_intr_reset_handlers(soter2_interface *intr, soter2_ivtable vt);
 
 int soter2_intr_save_sign(soter2_interface *intr, const char *path);
@@ -63,22 +73,25 @@ int soter2_intr_upd_sign (soter2_interface *intr, const char *path);
 
 void soter2_intr_end (soter2_interface *intr);
 int  soter2_intr_run (soter2_interface *intr);
-int  soter2_intr_stateconn(soter2_interface *intr, naddr_t addr, int state_req_dt);
-int  soter2_intr_statestop(soter2_interface *intr);
+int  soter2_intr_stateconn (soter2_interface *intr, naddr_t addr, int state_req_dt);
+int  soter2_intr_statestop (soter2_interface *intr);
 int  soter2_intr_wait_state(soter2_interface *intr, int timeout, state_request *out_req);
 
 void soter2_iconnect(soter2_interface *intr, naddr_t address, uint32_t UID);
 int  soter2_istatewait(soter2_interface *intr, uint32_t client_uid, peer_state state, peer_info *info);
 
 int           soter2_iwait_chan(soter2_interface *intr, uint32_t client_uid);
-rudp_channel *soter2_inew_chan(soter2_interface *intr, nnet_fd nfd, uint32_t client_uid);
-rudp_channel *soter2_iget_chan(soter2_interface *intr, uint32_t client_uid);
+rudp_channel *soter2_inew_chan (soter2_interface *intr, nnet_fd *nfd, uint32_t client_uid);
+rudp_channel *soter2_iget_chan (soter2_interface *intr, uint32_t client_uid);
+
+int soter2_e2ee_wrap(soter2_interface *intr, rudp_channel *chan, e2ee_channel *wrapped, unsigned char other_pubkey[CRYPTO_PUBKEY_BYTES]);
 
 protopack *soter2_irecv(rudp_channel *chan);
 int soter2_iwait_pack  (rudp_channel *chan, int timeout);
-int soter2_isend_r     (soter2_interface *intr, nnet_fd nfd, protopack *p);
+int soter2_isend_r     (soter2_interface *intr, rudp_channel *chan, protopack *p);
 int soter2_isend       (soter2_interface *intr, rudp_channel *chan, void *data, size_t dsize);
 
+float    soter2_get_DPS  (soter2_interface *intr);
 void     soter2_punch    (app_context ctx, app_peer_info peer);
 nat_type soter2_intr_STUN(soter2_interface *intr, naddr_t stun1, naddr_t stun2);
 

@@ -13,7 +13,7 @@ typedef enum {
 
 typedef struct {
     uint32_t        seq;
-    uint32_t        timestamp;
+    int64_t         timestamp;
     protopack      *copy_pack;
     rudp_pkt_state  state;
 
@@ -27,7 +27,7 @@ int rudp_pkt_make(
     protopack     *pack, 
     rudp_pkt_state state,
     uint32_t       seq,
-    nnet_fd        nfd
+    nnet_fd       *nfd
 );
 
 typedef struct {

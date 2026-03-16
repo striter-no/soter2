@@ -30,6 +30,14 @@ void prot_array_unlock(prot_array *array){
     pthread_mutex_unlock(&array->mtx);
 }
 
+size_t prot_array_len(prot_array *array){
+    if (!array) return 0;
+    pthread_mutex_lock(&array->mtx);
+    size_t r = array->array.len;
+    pthread_mutex_unlock(&array->mtx);
+    return r;
+}
+
 int prot_array_push(prot_array *array, const void *element){
     if (!array) return -1;
 

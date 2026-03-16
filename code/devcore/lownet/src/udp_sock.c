@@ -29,7 +29,7 @@ void ln_usock_close(ln_usocket *cli){
 }
 
 int ln_usock_bind(ln_usocket *cli, naddr_t addr){
-    ln_netfd(addr, &cli->fd);
+    ln_netfd(&addr, &cli->fd);
 
     return bind(
         cli->fd.rfd,
@@ -54,13 +54,13 @@ ssize_t ln_usock_recv(ln_usocket *cli, void *buf, size_t n, nnet_fd *from){
     );
 }
 
-ssize_t ln_usock_send(ln_usocket *cli, const void *buf, size_t n, nnet_fd to){
+ssize_t ln_usock_send(ln_usocket *cli, const void *buf, size_t n, nnet_fd *to){
     if (!cli) return -1;
     
     return sendto(
         cli->fd.rfd,
         buf, n, 0,
-        (const struct sockaddr*)&to.addr,
-        to.addr_len
+        (const struct sockaddr*)&to->addr,
+        to->addr_len
     );
 }

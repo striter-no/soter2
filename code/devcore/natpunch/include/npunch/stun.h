@@ -8,7 +8,7 @@
 
 int natp_request_stun(
     ln_usocket *client,
-    naddr_t  stun_addr
+    naddr_t  *stun_addr
 );
 
 #endif

@@ -10,8 +10,8 @@ typedef enum {
 
 nat_type nat_get_type(
     ln_usocket *client,
-    naddr_t first_stun,
-    naddr_t second_stun,
+    naddr_t *first_stun,
+    naddr_t *second_stun,
     unsigned short port
 );
 

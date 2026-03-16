@@ -1,6 +1,6 @@
 #include <soter2/handlers.h>
 
-int soter2_hnd_ACK(protopack *pck, nnet_fd nfd, pvd_sender *s, void *_ctx){
+int soter2_hnd_ACK(protopack *pck, nnet_fd *nfd, pvd_sender *s, void *_ctx){
     if (!_ctx) return -1;
     (void)nfd;
 
@@ -14,7 +14,7 @@ int soter2_hnd_ACK(protopack *pck, nnet_fd nfd, pvd_sender *s, void *_ctx){
 
     if (info.state == PEER_ST_INITED){
         protopack *msg = proto_msg_quick(ctx->rudp->self_uid, info.UID, 0, PACK_ACK);
-        pvd_sender_send(s, msg, info.nfd);
+        pvd_sender_send(s, msg, &info.nfd);
         free(msg);
     }
 
@@ -23,7 +23,7 @@ int soter2_hnd_ACK(protopack *pck, nnet_fd nfd, pvd_sender *s, void *_ctx){
     return 0;
 }
 
-int soter2_hnd_PUNCH(protopack *pck, nnet_fd nfd, pvd_sender *s, void *_ctx){
+int soter2_hnd_PUNCH(protopack *pck, nnet_fd *nfd, pvd_sender *s, void *_ctx){
     if (!_ctx) return -1;
 
     app_context *ctx = _ctx;
@@ -56,7 +56,7 @@ int soter2_hnd_PUNCH(protopack *pck, nnet_fd nfd, pvd_sender *s, void *_ctx){
     return 0;
 }
 
-int soter2_hnd_PING(protopack *pck, nnet_fd nfd, pvd_sender *s, void *_ctx){
+int soter2_hnd_PING(protopack *pck, nnet_fd *nfd, pvd_sender *s, void *_ctx){
     app_context *ctx = _ctx;
     
     protopack *pong = proto_msg_quick(
@@ -65,22 +65,28 @@ int soter2_hnd_PING(protopack *pck, nnet_fd nfd, pvd_sender *s, void *_ctx){
     pvd_sender_send(s, pong, nfd);
     free(pong);
 
-    peers_db_utime(ctx->p_db, pck->h_from);
+    if (0 > peers_db_utime(ctx->p_db, pck->h_from)){
+        printf("ping failed!\n");
+        // peers_db_remove(ctx->p_db, pck->h_from);
+    }
     // printf("got ping\n");
     return 0;
 }
 
-int soter2_hnd_PONG(protopack *pck, nnet_fd nfd, pvd_sender *s, void *_ctx){
+int soter2_hnd_PONG(protopack *pck, nnet_fd *nfd, pvd_sender *s, void *_ctx){
     app_context *ctx = _ctx;
     (void)nfd;
     (void)s;
 
-    peers_db_utime(ctx->p_db, pck->h_from);
+    if (0 > peers_db_utime(ctx->p_db, pck->h_from)){
+        printf("pong failed!\n");
+        // peers_db_remove(ctx->p_db, pck->h_from);
+    }
     // printf("got pong\n");
     return 0;
 }
 
-int soter2_hnd_GOSSIP(protopack *pck, nnet_fd nfd, pvd_sender *s, void *_ctx){
+int soter2_hnd_GOSSIP(protopack *pck, nnet_fd *nfd, pvd_sender *s, void *_ctx){
     app_context *ctx = _ctx;
     (void)nfd;
     (void)s;
@@ -90,7 +96,7 @@ int soter2_hnd_GOSSIP(protopack *pck, nnet_fd nfd, pvd_sender *s, void *_ctx){
     return 0;
 }
 
-int soter2_hnd_STATE (protopack *pck, nnet_fd nfd, pvd_sender *s, void *_ctx){
+int soter2_hnd_STATE (protopack *pck, nnet_fd *nfd, pvd_sender *s, void *_ctx){
     app_context *ctx = _ctx;
     (void)nfd;
     (void)s;
@@ -100,9 +106,9 @@ int soter2_hnd_STATE (protopack *pck, nnet_fd nfd, pvd_sender *s, void *_ctx){
         return -1;
     }
 
-    uint32_t dt = time(NULL) - req.timestamp;
+    int64_t dt = mt_time_get_seconds() - req.timestamp;
     if (dt >= 30){
-        fprintf(stderr, "[hnd][state] rejecting peer, too old (delta: %u)\n", dt);
+        fprintf(stderr, "[hnd][state] rejecting peer, too old (delta: %li)\n", dt);
         return -1;
     }
 

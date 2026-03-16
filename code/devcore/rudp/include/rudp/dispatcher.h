@@ -4,9 +4,19 @@
 #include "channels.h"
 
 #ifndef RUDP_DISPATCHER_H
+
+#ifndef RUDP_RETRANSMISSION_CAP
 #define RUDP_RETRANSMISSION_CAP 10
-#define RUDP_TIMEOUT            10
-#define RUDP_REORDER_WINDOW     5
+#endif
+
+#ifndef RUDP_TIMEOUT
+#define RUDP_TIMEOUT 200
+#endif
+
+#ifndef RUDP_REORDER_WINDOW
+#define RUDP_REORDER_WINDOW     128
+
+#endif
 
 typedef struct {
     pvd_sender   *sender;
@@ -40,7 +50,7 @@ int rudp_dispatcher_run(
 int rudp_dispatcher_send(
     rudp_dispatcher *d,
     protopack       *pack,
-    nnet_fd          to
+    nnet_fd         *to
 );
 
 int rudp_direct_send(
@@ -52,13 +62,13 @@ int rudp_direct_send(
 int rudp_dispatcher_pass(
     rudp_dispatcher *d,
     protopack       *pack,
-    nnet_fd          from
+    nnet_fd         *from
 );
 
 // -- channels
 int rudp_dispatcher_chan_new(
     rudp_dispatcher *d,
-    nnet_fd client_nfd,
+    nnet_fd *client_nfd,
     uint32_t client_uid
 );
 

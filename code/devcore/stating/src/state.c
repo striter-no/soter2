@@ -51,7 +51,7 @@ state_request state_rcreate(
     req.uid   = htonl(uid);
     req.nonce = htonl(randombytes_random());
     req.type  = (uint8_t)(type);
-    req.timestamp = htonl(time(NULL));
+    req.timestamp = htonl(mt_time_get_seconds());
     memcpy(req.pubkey, s.id_pub, CRYPTO_PUBKEY_BYTES);
 
     uint8_t sign_buff[128] = {0};

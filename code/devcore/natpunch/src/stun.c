@@ -26,7 +26,7 @@ struct stun_attr {
 
 int natp_request_stun(
     ln_usocket *client,
-    naddr_t  stun_addr
+    naddr_t  *stun_addr
 ){
     struct stun_header req;
     req.type   = htons(STUN_BINDING_REQUEST);
@@ -50,7 +50,7 @@ int natp_request_stun(
     socklen_t from_len = sizeof(from);
     
     // Проверяем результат ожидания
-    int wait_r = ln_wait_netfd(client->fd, POLLIN, 1000); // 1 сек достаточно
+    int wait_r = ln_wait_netfd(&client->fd, POLLIN, 1000); // 1 сек достаточно
     if (wait_r <= 0) {
         fprintf(stderr, "[STUN] wait timeout/error (r=%d)\n", wait_r);
         return -1; 

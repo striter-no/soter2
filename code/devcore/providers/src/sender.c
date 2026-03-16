@@ -1,5 +1,4 @@
 #include <providers/sender.h>
-#include <time.h>
 
 struct pvd_sender_pack {
     protopack *pack;
@@ -23,8 +22,13 @@ int pvd_sender_new(pvd_sender *s, ln_usocket *p_usocket){
 
 void pvd_sender_end(pvd_sender *s){
     if (!s) return;
+
     atomic_store(&s->is_running, false);
-    pthread_join(s->daemon, NULL);
+
+    if (s->daemon) {
+        pthread_join(s->daemon, NULL);
+    }
+
     mt_evsock_close(&s->newpack_es);
     s->p_usocket = NULL;
     
@@ -36,30 +40,41 @@ void pvd_sender_end(pvd_sender *s){
 }
 
 static void *pvd_sender_worker(void *_args);
+
 int pvd_sender_start(pvd_sender *s){
     if (!s) return -1;
 
     atomic_store(&s->is_running, true);
     int r = pthread_create(
         &s->daemon, NULL,
-        pvd_sender_worker,s
+        pvd_sender_worker, s
     );
+
+    if (r != 0) {
+        atomic_store(&s->is_running, false);
+    }
 
     return r;
 }
 
-
-int pvd_sender_send(pvd_sender *s, protopack *packet, nnet_fd to){
-    if (!s || !packet) return -1;
+int pvd_sender_send(pvd_sender *s, protopack *packet, nnet_fd *to){
+    if (!s || !packet || !to) return -1;
 
     protopack *pkt = udp_copy_pack(packet);
+    if (!pkt) return -1;
+
     pvd_sender_pack_t ppkt = {
         .pack = pkt,
-        .to   = to
+        .to   = *to
     };
 
-    mt_evsock_notify(&s->newpack_es);
     prot_queue_push(&s->packets, &ppkt);
+
+    if (0 > mt_evsock_notify(&s->newpack_es)) {
+        /* Не теряем пакет даже если notify не сработал.
+           Worker всё равно периодически просыпается по timeout. */
+    }
+
     return 0;
 }
 
@@ -67,50 +82,54 @@ static void *pvd_sender_worker(void *_args){
     pvd_sender *sender = _args;
     
     while (atomic_load(&sender->is_running)){
-        int timeout = 100;
-        int r = mt_evsock_wait(&sender->newpack_es, timeout);
+        int r = mt_evsock_wait(&sender->newpack_es, 100);
+        if (r < 0) {
+            perror("poll()");
+        }
         if (r == 0) continue;
-
-        // printf("[pvd][sender] awaited %d events...\n", r);
-        if (r < 0) {perror("poll()"); break;}
-
+        
         pvd_sender_pack_t ppkt = {0};
-        for (int i = 0; i < 5; i++){
-            if (0 != prot_queue_pop(&sender->packets, &ppkt))
-                goto nxt;
-            
-            break;
-            nxt:
-            nanosleep(&(struct timespec){.tv_sec = 0, .tv_nsec = 10000000}, NULL);
+        while (0 == prot_queue_pop(&sender->packets, &ppkt)) {
+            if (!ppkt.pack) {
+                fprintf(stderr, "pvd_sender_pack has NULL pack\n");
+                continue;
+            }
+
+            char buf[2048] = {0};
+
+            protopack *retranslated = retranslate_udp(ppkt.pack);
+            if (!retranslated) {
+                fprintf(stderr, "retranslate_udp() failed\n");
+                free(ppkt.pack);
+                continue;
+            }
+
+            int packtype = retranslated->packtype;
+            ssize_t s = protopack_send(retranslated, buf);
+
+            if (s < 0){
+                fprintf(stderr, "protopack_send() failed\n");
+                free(retranslated);
+                free(ppkt.pack);
+                continue;
+            }
+
+            if (s > (ssize_t)sizeof(buf)){
+                fprintf(stderr, "protopack_send() returned bigger data than expected\n");
+                free(retranslated);
+                free(ppkt.pack);
+                abort();
+            }
+
+            naddr_t addr = ln_nfd2addr(&ppkt.to);
+            printf("[pvd][sender] pkt: %s sending %zd bytes to %s:%u\n",
+                   PROTOPACK_TYPES_CHAR[packtype], s, addr.ip.v4.ip, addr.ip.v4.port);
+
+            ln_usock_send(sender->p_usocket, buf, s, &ppkt.to);
+
+            free(retranslated);
+            free(ppkt.pack);
         }
-
-        if (!ppkt.pack){
-            fprintf(stderr, "pvd_sender_pack somehow has NULL rpack\n");
-            continue;
-        }
-
-        char buf[2048] = {0};
-
-        // printf("[pvd][sender]")
-        // printf("[pvd][sender] sending %u bytes as dsize: %.*s\n", ppkt.pack->d_size, ppkt.pack->d_size, ppkt.pack->data);
-        protopack *retranslated = retranslate_udp(ppkt.pack);
-        ssize_t s = protopack_send(retranslated, buf);
-        free(retranslated);
-
-        if (s < 0){
-            fprintf(stderr, "protopack_send() failed");
-            goto end;
-        } else if (s > 2048){
-            fprintf(stderr, "protopack_send() returned bigger data than expected, memory is polluted\n");
-            abort();
-        }
-
-        naddr_t addr = ln_nfd2addr(ppkt.to);
-        // printf("[pvd][sender] sending %zd bytes to %s:%u\n", s, addr.ip.v4.ip, addr.ip.v4.port);
-        ln_usock_send(sender->p_usocket, buf, s, ppkt.to);
-
-end:
-        free(ppkt.pack);
     }
 
     return NULL;

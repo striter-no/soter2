@@ -12,15 +12,12 @@ typedef enum: uint8_t {
     PACK_PONG,      // no RUDP (integrety doesnt matter)
     PACK_PUNCH,     // no RUDP (natpunching module)
     PACK_GOSSIP,    // no RUDP (integrety doesnt matter)
-    PACK_HELLO,     // RUDP
-    PACK_REJECT,    // RUDP
-    PACK_ACCEPT,    // RUDP
     PACK_STATE,     // no RUDP
     PACK_RACK,      // RUDP ACK
-    PACK_HANDSHAKE_C, // RUDP, crypto
-    PACK_HANDSHAKE_S, // RUDP, crypto
     __PROTOPACK_END
 } protopack_type;
+
+extern const char *PROTOPACK_TYPES_CHAR[];
 
 #define PACKET_TYPE_MAX ((size_t)__PROTOPACK_END)
 

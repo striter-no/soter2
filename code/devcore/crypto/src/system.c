@@ -1,4 +1,5 @@
 #include <crypto/system.h>
+#include <netinet/in.h>
 #include <string.h>
 
 int crypto_init(){
@@ -13,6 +14,8 @@ int crypto_encrypt(
     crypto_session_keys sk
 ){
     unsigned char nonce[crypto_aead_chacha20poly1305_ietf_NPUBBYTES] = {0};
+    
+    seq = htonl(seq);
     memcpy(nonce, &seq, sizeof(seq));
     
     unsigned long long out_len;
@@ -34,7 +37,9 @@ int crypto_decrypt(
     if (cipher_size < crypto_aead_chacha20poly1305_ietf_ABYTES) return -1;
 
     unsigned char nonce[crypto_aead_chacha20poly1305_ietf_NPUBBYTES] = {0};
-    memcpy(nonce, &seq, sizeof(seq));
+    
+    seq = ntohl(seq);
+    memcpy(nonce, &seq, sizeof(seq));    
 
     unsigned long long out_len;
     return crypto_aead_chacha20poly1305_ietf_decrypt(

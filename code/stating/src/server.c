@@ -16,7 +16,7 @@ typedef struct {
     mt_eventsock      new_request;
 } state_server;
 
-static int state_handler(protopack *pck, nnet_fd nfd, pvd_sender *s, void *_ctx){
+static int state_handler(protopack *pck, nnet_fd *nfd, pvd_sender *s, void *_ctx){
     // extract data from pck
     state_server *serv = _ctx;
     (void)nfd;
@@ -33,7 +33,7 @@ static int state_handler(protopack *pck, nnet_fd nfd, pvd_sender *s, void *_ctx)
         return -1;
     }
 
-    server_request servr = {r, nfd};
+    server_request servr = {r, *nfd};
 
     printf("[state_handler] request from %u\n", r.uid);
     prot_queue_push(&serv->requests, &servr);
@@ -85,44 +85,39 @@ int main(int argc, char *argv[]){
         if (mt_evsock_wait(&server.new_request, 100) <= 0) continue;
         mt_evsock_drain(&server.new_request);
         
-        server_request *r_ptr = prot_queue_peek(&server.requests);
-        if (!r_ptr) continue;
-        server_request sr = *r_ptr;
-        state_request  r = sr.r;
+        server_request sr;
+        while (prot_queue_pop(&server.requests, &sr) == 0) {
+            printf("looping...\n");
+            state_request r = sr.r;
 
-        server_request *peer = prot_queue_peek(&server.pending_peers);
-        
-        if (peer) {
-            if (r.uid == peer->r.uid){
-                printf("[main][loop] ignoring identical UIDs\n");
-                goto skip;
+            server_request *peer = prot_queue_peek(&server.pending_peers);
+            
+            if (peer) {
+                if (r.uid == peer->r.uid){
+                    printf("[main][loop] ignoring identical UIDs\n");
+                    continue;
+                }
+                
+                state_request to_new = state_retranslate(peer->r);
+
+                protopack *pack_to_new = udp_make_pack(0, 0, r.uid, PACK_STATE, &to_new, sizeof(to_new));
+                pvd_sender_send(&server.intr->sender, pack_to_new, &sr.nfd);
+                free(pack_to_new);
+
+                state_request to_old = state_retranslate(r);
+                protopack *pack_to_peer = udp_make_pack(0, 0, peer->r.uid, PACK_STATE, &to_old, sizeof(to_old));
+                pvd_sender_send(&server.intr->sender, pack_to_peer, &peer->nfd);
+                free(pack_to_peer);
+
+                printf("[pair] connected uid:%u <-> uid:%u\n", peer->r.uid, r.uid);
+                
+                prot_queue_pop(&server.pending_peers, NULL);
+            } else {
+                prot_array_filter(&server.pending_peers.arr, uid_filter, &r.uid);
+                printf("[queue] uid:%u waiting for peer\n", r.uid);
+                prot_queue_upush(&server.pending_peers, &sr);
             }
-            
-            state_request to_new = state_retranslate(peer->r);
-
-            // 1. Новому клиенту шлём данные ожидающего
-            protopack *pack_to_new = udp_make_pack(0, 0, r.uid, PACK_STATE, &to_new, sizeof(to_new));
-            pvd_sender_send(&server.intr->sender, pack_to_new, sr.nfd);
-            free(pack_to_new);
-
-            state_request to_old = state_retranslate(r);
-            // 2. Ожидающему клиенту шлём данные нового
-            protopack *pack_to_peer = udp_make_pack(0, 0, peer->r.uid, PACK_STATE, &to_old, sizeof(to_old));
-            pvd_sender_send(&server.intr->sender, pack_to_peer, peer->nfd);
-            free(pack_to_peer);
-
-            printf("[pair] connected uid:%u <-> uid:%u\n", peer->r.uid, r.uid);
-            
-            // Убираем ожидающего из pending_peers
-            prot_queue_pop(&server.pending_peers, NULL);
-        } else {
-            prot_array_filter(&server.pending_peers.arr, uid_filter, &r.uid);
-            printf("[queue] uid:%u waiting for peer\n", r.uid);
-            prot_queue_upush(&server.pending_peers, &sr);
         }
-skip:        
-        // Всегда убираем обработанный запрос из requests!
-        prot_queue_pop(&server.requests, NULL);
     }
 
     soter2_intr_end(&intr);

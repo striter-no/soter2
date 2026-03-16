@@ -2,6 +2,7 @@
 #include <base/prot_queue.h>
 #include <packproto/proto.h>
 #include <multithr/events.h>
+#include <multithr/time.h>
 #include <stdatomic.h>
 #include <pthread.h>
 

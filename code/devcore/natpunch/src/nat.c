@@ -3,15 +3,17 @@
 
 nat_type nat_get_type(
     ln_usocket *client,
-    naddr_t first_stun,
-    naddr_t second_stun,
+    naddr_t *first_stun,
+    naddr_t *second_stun,
     unsigned short port
 ){
     // ln_usocket client;
     // if (0 > ln_usock_new(&client)) return -1;
 
     naddr_t addr[2] = {0};
-    ln_netfd(ln_make4(ln_ipv4("0.0.0.0", port)), &client->fd);
+    
+    naddr_t n = ln_make4(ln_ipv4("0.0.0.0", port));
+    ln_netfd(&n, &client->fd);
 
     if (0 > bind(
         client->fd.rfd,

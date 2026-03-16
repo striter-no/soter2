@@ -11,3 +11,4 @@
 #include <stating/state.h>
 #include <stdint.h>
 #include <watcher/system.h>
+#include <e2ee/channels.h>
