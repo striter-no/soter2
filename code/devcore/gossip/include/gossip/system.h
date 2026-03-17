@@ -2,12 +2,12 @@
 #include <stdint.h>
 #include <base/prot_array.h>
 #include <packproto/proto.h>
+#include <multithr/time.h>
 
 #ifndef GOSSIP_SYSTEM_H
 #define GOSSIP_DEAD_DT (60 * 60) // one hour
 
-#pragma pack(push, 1)
-typedef struct {
+typedef struct __attribute__((packed)) {
     uint32_t uid;       // UID
     uint32_t ip;        // used IP
     uint16_t port;      // opened/used port
@@ -17,7 +17,6 @@ typedef struct {
     uint32_t mtd_size;
     char     metadata[];  // can be public key, signature etc.
 } gossip_entry;
-#pragma pack(pop)
 
 // no daemon, works only as data storage
 typedef struct {

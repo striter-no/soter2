@@ -11,7 +11,7 @@ int crypto_encrypt(
     unsigned char *out_ciphertext,
     const unsigned char *raw_data,
     size_t raw_size,
-    uint32_t seq,
+    uint64_t *nonce_counter,
     crypto_session_keys sk
 );
 
@@ -19,7 +19,7 @@ int crypto_decrypt(
     unsigned char *out_raw,
     const unsigned char *ciphertext,
     size_t cipher_size,
-    uint32_t seq,
+    uint64_t *nonce_counter,
     crypto_session_keys sk
 );
 

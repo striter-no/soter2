@@ -1,6 +1,7 @@
 #include <soter2/interface.h>
 #include <crypto/system.h>
 #include <stating/state.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 
@@ -55,15 +56,15 @@ int main(int argc, char *argv[]){
         return 0;
     }
     
-    soter2_interface intr;
+    soter2_interface intr = {0};
     if (0 > soter2_intr_init(&intr)) {
         fprintf(stderr, "[main] failed to init interface\n");
         return -1;
     }
-
-    state_server server;
+    
+    state_server server = {0};
     server.intr = &intr;
-    mt_evsock_new(&server.new_request);
+    mt_evsock_new    (&server.new_request);
     prot_queue_create(sizeof(server_request), &server.requests);
     prot_queue_create(sizeof(server_request), &server.pending_peers);
 
@@ -73,7 +74,11 @@ int main(int argc, char *argv[]){
 
     soter2_intr_reset_handlers(&intr, vt);
 
-    ln_usock_bind(&intr.sock, ln_make4(ln_ipv4(argv[1], atoi(argv[2]))));
+    if (0 > ln_usock_bind(&intr.sock, ln_make4(ln_ipv4(argv[1], atoi(argv[2]))))){
+        perror("[main] failed to bind");
+        return -1;
+    }
+
     if (0 > soter2_intr_run(&intr)){
         fprintf(stderr, "[main] failed to run interface\n");
         return -1;
@@ -81,7 +86,7 @@ int main(int argc, char *argv[]){
 
     printf("[main] running server...\n");
 
-    while(atomic_load(&intr.is_running)){
+    while(soter2_irunning(&intr)){
         if (mt_evsock_wait(&server.new_request, 100) <= 0) continue;
         mt_evsock_drain(&server.new_request);
         

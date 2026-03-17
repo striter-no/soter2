@@ -70,11 +70,7 @@ int pvd_sender_send(pvd_sender *s, protopack *packet, nnet_fd *to){
 
     prot_queue_push(&s->packets, &ppkt);
 
-    if (0 > mt_evsock_notify(&s->newpack_es)) {
-        /* Не теряем пакет даже если notify не сработал.
-           Worker всё равно периодически просыпается по timeout. */
-    }
-
+    if (0 > mt_evsock_notify(&s->newpack_es)) {}
     return 0;
 }
 
@@ -122,8 +118,8 @@ static void *pvd_sender_worker(void *_args){
             }
 
             naddr_t addr = ln_nfd2addr(&ppkt.to);
-            printf("[pvd][sender] pkt: %s sending %zd bytes to %s:%u\n",
-                   PROTOPACK_TYPES_CHAR[packtype], s, addr.ip.v4.ip, addr.ip.v4.port);
+            // printf("[pvd][sender] pkt: %s sending %zd bytes to %s:%u\n",
+            //        PROTOPACK_TYPES_CHAR[packtype], s, addr.ip.v4.ip, addr.ip.v4.port);
 
             ln_usock_send(sender->p_usocket, buf, s, &ppkt.to);
 

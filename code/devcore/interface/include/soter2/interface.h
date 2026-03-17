@@ -1,13 +1,8 @@
-#ifndef _GNU_SOURCE
-#define _GNU_SOURCE
-#include <stdint.h>
-#include <sys/types.h>
-#endif
-
 #include <soter2/modules.h>
 #include <soter2/handlers.h>
 
 #ifndef SOTER_INTERFACE_H
+#define SOTER_INTERFACE_H
 
 #ifndef SOTER_DEAD_DT
 #define SOTER_DEAD_DT 6
@@ -77,24 +72,21 @@ int  soter2_intr_stateconn (soter2_interface *intr, naddr_t addr, int state_req_
 int  soter2_intr_statestop (soter2_interface *intr);
 int  soter2_intr_wait_state(soter2_interface *intr, int timeout, state_request *out_req);
 
-void soter2_iconnect(soter2_interface *intr, naddr_t address, uint32_t UID);
+void soter2_iconnect  (soter2_interface *intr, naddr_t address, uint32_t UID);
 int  soter2_istatewait(soter2_interface *intr, uint32_t client_uid, peer_state state, peer_info *info);
 
-int           soter2_iwait_chan(soter2_interface *intr, uint32_t client_uid);
-rudp_channel *soter2_inew_chan (soter2_interface *intr, nnet_fd *nfd, uint32_t client_uid);
-rudp_channel *soter2_iget_chan (soter2_interface *intr, uint32_t client_uid);
+int soter2_inew_conn(soter2_interface *intr, rudp_connection **conn, nnet_fd *nfd, uint32_t client_uid);
+int soter2_iget_conn(soter2_interface *intr, rudp_connection **conn, uint32_t client_uid);
 
-int soter2_e2ee_wrap(soter2_interface *intr, rudp_channel *chan, e2ee_channel *wrapped, unsigned char other_pubkey[CRYPTO_PUBKEY_BYTES]);
+int soter2_e2ee_wrap(soter2_interface *intr, rudp_connection *conn, e2ee_connection *wrapped, unsigned char other_pubkey[CRYPTO_PUBKEY_BYTES]);
 
-protopack *soter2_irecv(rudp_channel *chan);
-int soter2_iwait_pack  (rudp_channel *chan, int timeout);
-int soter2_isend_r     (soter2_interface *intr, rudp_channel *chan, protopack *p);
-int soter2_isend       (soter2_interface *intr, rudp_channel *chan, void *data, size_t dsize);
+protopack *soter2_irecv(rudp_connection *conn);
+int soter2_isend_r     (rudp_connection *conn, protopack *p);
+int soter2_isend       (rudp_connection *conn, void *data, size_t dsize);
 
 float    soter2_get_DPS  (soter2_interface *intr);
 void     soter2_punch    (app_context ctx, app_peer_info peer);
 nat_type soter2_intr_STUN(soter2_interface *intr, naddr_t stun1, naddr_t stun2);
-
+bool     soter2_irunning(soter2_interface *intr);
 
 #endif
-#define SOTER_INTERFACE_H

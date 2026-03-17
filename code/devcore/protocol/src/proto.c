@@ -29,12 +29,11 @@ static uint32_t crc32(const void *data, size_t n_bytes) {
 
 bool udp_is_RUDP_req(protopack_type type){
     switch (type) {
-        case PACK_DATA:      return true;
-        // case PACK_HELLO:     return true;
-        // case PACK_REJECT:    return true;
-        // case PACK_ACCEPT:    return true;
-        case PACK_RACK:      return true;
-        default:                 return false;
+        case PACK_DATA: return true;
+        case PACK_FIN:  return true;
+        case PACK_RACK: return true;
+        
+        default: return false;
     }
 }
 

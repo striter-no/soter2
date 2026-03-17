@@ -14,6 +14,7 @@ typedef enum: uint8_t {
     PACK_GOSSIP,    // no RUDP (integrety doesnt matter)
     PACK_STATE,     // no RUDP
     PACK_RACK,      // RUDP ACK
+    PACK_FIN,       // RUDP FIN
     __PROTOPACK_END
 } protopack_type;
 
@@ -23,8 +24,7 @@ extern const char *PROTOPACK_TYPES_CHAR[];
 
 bool udp_is_RUDP_req(protopack_type type);
 
-#pragma pack(push, 1)
-typedef struct {
+typedef struct __attribute__((packed)) {
     uint32_t seq;
     uint32_t chsum;
     uint32_t d_size;
@@ -33,7 +33,6 @@ typedef struct {
     uint8_t  packtype;
     uint8_t  data[];
 } protopack;
-#pragma pack(pop)
 
 protopack *udp_make_pack(
     uint32_t  sequence_n,

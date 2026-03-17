@@ -1,5 +1,6 @@
-#include <pthread.h>
 #include <soter2/interface.h>
+#include <multithr/time.h>
+#include <pthread.h>
 #include <stdint.h>
 #include <sys/stat.h>
 #include <time.h>
@@ -7,6 +8,8 @@
 int soter2_intr_init(
     soter2_interface *intr
 ){
+    if (0 > crypto_init()) return -1;
+
     intr->self_sign = sign_gen();
 
     uint32_t UID = crypto_pubkey_to_uid(intr->self_sign.id_pub);
@@ -106,11 +109,14 @@ void soter2_intr_end(soter2_interface *intr){
 static void *iter_daemon(void *_args);
 int soter2_intr_run(soter2_interface *intr){
     if (!intr) return -1;
-
-    if (0 > pvd_listener_start(&intr->listener)) return -1;
-    if (0 > pvd_sender_start(&intr->sender)) return -1;
-    if (0 > watcher_start(&intr->wtch)) return -1;
-    if (0 > rudp_dispatcher_run(&intr->rudp_disp)) return -1;
+    if (0 > pvd_listener_start(&intr->listener)) 
+        return -1;
+    if (0 > pvd_sender_start(&intr->sender)) 
+        return -1;
+    if (0 > watcher_start(&intr->wtch)) 
+        return -1;
+    if (0 > rudp_dispatcher_run(&intr->rudp_disp)) 
+        return -1;
 
     atomic_store(&intr->is_running, true);
     pthread_create(&intr->iter_daemon, NULL, iter_daemon, intr);
@@ -140,9 +146,9 @@ int soter2_intr_wait_state(soter2_interface *intr, int timeout, state_request *o
     return r;
 }
 
-int soter2_e2ee_wrap(soter2_interface *intr, rudp_channel *chan, e2ee_channel *wrapped, unsigned char other_pubkey[CRYPTO_PUBKEY_BYTES]){
-    if (!intr || !chan || !wrapped) return -1;
-    return e2ee_chan_init(wrapped, &intr->rudp_disp, chan, intr->self_sign, other_pubkey);
+int soter2_e2ee_wrap(soter2_interface *intr, rudp_connection *conn, e2ee_connection *wrapped, unsigned char other_pubkey[CRYPTO_PUBKEY_BYTES]){
+    if (!intr || !conn || !wrapped) return -1;
+    return e2ee_conn_init(wrapped, conn, intr->self_sign, other_pubkey);
 }
 
 void soter2_iconnect(soter2_interface *intr, naddr_t address, uint32_t UID){
@@ -167,48 +173,44 @@ nat_type soter2_intr_STUN(soter2_interface *intr, naddr_t stun1, naddr_t stun2){
     return intr->NAT;
 }
 
-int soter2_istatewait(soter2_interface *intr, uint32_t client_uid, peer_state state, peer_info *info){
-    return peers_db_wait(&intr->pdb, client_uid, state, info);
+int soter2_istatewait(soter2_interface *intr, uint32_t c_uid, peer_state state, peer_info *info){
+    return peers_db_wait(&intr->pdb, c_uid, state, info);
+}
+
+bool soter2_irunning(soter2_interface *intr){
+    if (!intr) return false;
+    return atomic_load(&intr->is_running);
 }
 
 // -- user-connections
 
-int soter2_iwait_chan(soter2_interface *intr, uint32_t client_uid){
-    return rudp_dispatcher_chan_wait(&intr->rudp_disp, client_uid);
+int soter2_inew_conn(soter2_interface *intr, rudp_connection **conn, nnet_fd *nfd, uint32_t c_uid){
+    if (!intr || !conn) return -1;
+    return rudp_est_connection(&intr->rudp_disp, conn, c_uid, nfd);
 }
 
-rudp_channel *soter2_inew_chan(soter2_interface *intr, nnet_fd *nfd, uint32_t client_uid){
-    if (0 > rudp_dispatcher_chan_new(&intr->rudp_disp, nfd, client_uid)) 
-        return NULL;
-
-    rudp_channel *channel = NULL;
-    rudp_dispatcher_chan_get(&intr->rudp_disp, client_uid, &channel);
-    return channel;
+int soter2_iget_conn(soter2_interface *intr, rudp_connection **conn, uint32_t c_uid){
+    if (!intr || !conn) return -1;
+    
+    return rudp_get_connection(&intr->rudp_disp, c_uid, conn);
 }
 
-rudp_channel *soter2_iget_chan(soter2_interface *intr, uint32_t client_uid){
-    rudp_channel *channel = NULL;
-    rudp_dispatcher_chan_get(&intr->rudp_disp, client_uid, &channel);
-    return channel;
-}
-
-int soter2_iwait_pack(rudp_channel *chan, int timeout){
-    return rudp_channel_wait(chan, timeout);
-}
-
-protopack *soter2_irecv (rudp_channel *chan){
+protopack *soter2_irecv (rudp_connection *conn){
     protopack *r = NULL;
-    rudp_channel_recv(chan, &r);
+    rudp_conn_recv(conn, &r);
     return r;
 }
 
-int soter2_isend_r(soter2_interface *intr, rudp_channel *chan, protopack *p){
-    return rudp_direct_send(&intr->rudp_disp, chan, p);
+int soter2_isend_r(rudp_connection *conn, protopack *p){
+    return rudp_conn_send(conn, p);
 }
 
-int soter2_isend(soter2_interface *intr, rudp_channel *chan, void *data, size_t dsize){
-    protopack *p = udp_make_pack(chan->next_seq, intr->rudp_disp.self_uid, chan->client_uid, PACK_DATA, data, dsize);
-    int r = rudp_direct_send(&intr->rudp_disp, chan, p);
+int soter2_isend(rudp_connection *conn, void *data, size_t dsize){
+    protopack *p = udp_make_pack(
+        0, conn->s_uid, conn->c_uid, PACK_DATA, data, dsize
+    );
+
+    int r = rudp_conn_send(conn, p);
     free(p);
 
     return r;
@@ -279,7 +281,7 @@ static void *iter_daemon(void *_args){
         if (pkt.pack == 0 || pkt.from_who.addr_len == 0) continue;
 
         if (udp_is_RUDP_req(pkt.pack->packtype)){
-            rudp_dispatcher_pass(&intr->rudp_disp, pkt.pack, &pkt.from_who);
+            rudp_dispatcher_pass(&intr->rudp_disp, pkt.pack);
             intr->packets_translated++;
         } else {
             watcher_pass(&intr->wtch, pkt.pack, &pkt.from_who);
@@ -292,7 +294,6 @@ static void *iter_daemon(void *_args){
 static int state_iter(soter2_interface *intr){
     // requesting to server
 
-    printf("state_iter called (uid: %u)\n", intr->rudp_disp.self_uid);
     state_request r = state_rcreate(
         ln_to_uint32(&intr->sock.addr), 
         intr->sock.addr.ip.v4.port,

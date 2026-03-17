@@ -27,7 +27,7 @@ int crypto_keypair_store(const crypto_keypair *kp, const char *path){
     FILE *f = fopen(path, "w");
     if (!f) return -1;
 
-    if (sizeof(*kp) != fwrite(kp, sizeof(*kp), 1, f)){
+    if (1 != fwrite(kp, sizeof(*kp), 1, f)){
         fclose(f);
         return -1;
     }

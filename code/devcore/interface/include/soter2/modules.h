@@ -1,5 +1,6 @@
 #include <gossip/system.h>
 #include <logging/logging.h>
+#include <multithr/time.h>
 #include <lownet/udp_sock.h>
 #include <npunch/nat.h>
 #include <npunch/stun.h>
@@ -11,4 +12,4 @@
 #include <stating/state.h>
 #include <stdint.h>
 #include <watcher/system.h>
-#include <e2ee/channels.h>
+#include <e2ee/connection.h>

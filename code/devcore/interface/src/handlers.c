@@ -101,6 +101,11 @@ int soter2_hnd_STATE (protopack *pck, nnet_fd *nfd, pvd_sender *s, void *_ctx){
     (void)nfd;
     (void)s;
 
+    if (pck->d_size != sizeof(state_request)){
+        fprintf(stderr, "[hnd][state] bad packet size: %u\n", pck->d_size);
+        return -1;
+    }
+
     state_request req;
     if (0 > state_rreceive(pck->data, &req)){
         return -1;

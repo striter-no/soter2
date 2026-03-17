@@ -1,4 +1,5 @@
 
+#include "rudp/_modules.h"
 #define SOTER_DEAD_DT 10
 
 #include <soter2/interface.h>
@@ -44,42 +45,48 @@ int main(){
     // scanf("%[^:]:%u:%u", ip, &port, &uid);
 
     peer_info info;
+    rudp_connection *conn = NULL;
     // soter2_iconnect(&intr, ln_make4(ln_ipv4(ip, port)), uid);
     soter2_iconnect(&intr, ln_from_uint32(req.ip, req.port), req.uid);
     soter2_istatewait(&intr, req.uid, PEER_ST_ACTIVE, &info);
-    soter2_inew_chan(&intr, &info.nfd, req.uid);
     soter2_intr_statestop(&intr);
+    soter2_inew_conn(&intr, &conn, &info.nfd, req.uid);
 
-    rudp_channel *chan = soter2_iget_chan(&intr, req.uid);
-    e2ee_channel echan;
-    if (0 > soter2_e2ee_wrap(&intr, chan, &echan, req.pubkey)){
+    e2ee_connection econn;
+    if (0 > soter2_e2ee_wrap(&intr, conn, &econn, req.pubkey)){
         fprintf(stderr, "[main][e2ee] failed to wrap channel\n");
         goto end;
     }
 
-    printf("[main][e2ee] handshaking...\n");
-    if (0 > e2ee_chan_handshake_init(&echan)){
-        fprintf(stderr, "[main][e2ee] hs init failed\n");
-        goto end;
-    }
-    if (0 >= e2ee_chan_handshake_wait(&echan, -1)){
-        fprintf(stderr, "[main][e2ee] hs wait failed\n");
-        goto end;
-    }
-    if (0 > e2ee_chan_handshake_resp(&echan)){
-        fprintf(stderr, "[main][e2ee] hs response failed\n");
-        goto end;
-    }
-    printf("[main][e2ee] handshaked!\n");
+    // printf("[main][e2ee] handshaking...\n");
+    // if (0 > e2ee_conn_handshake_init(&econn)){
+    //     fprintf(stderr, "[main][e2ee] hs init failed\n");
+    //     goto end;
+    // }
+    // if (0 >= e2ee_conn_handshake_wait(&econn, -1)){
+    //     fprintf(stderr, "[main][e2ee] hs wait failed\n");
+    //     goto end;
+    // }
+    // if (0 > e2ee_conn_handshake_resp(&econn)){
+    //     fprintf(stderr, "[main][e2ee] hs response failed\n");
+    //     goto end;
+    // }
+
+    // printf("[main][e2ee] handshaked!\n");
 
     for (int i = 0; i < 100000; i++){
         char data[200]; snprintf(data, 50, "Hello %d", i);
         
-        while (1 == e2ee_send(&echan, data, strlen(data))){
+        while (0 != soter2_isend(conn, data, strlen(data))){
             usleep(10'000'000);
         }
 
-        int w = e2ee_wait(&echan, SOTER_DEAD_DT * 1000);
+        // while (0 != e2ee_send(&econn, data, strlen(data))){
+        //     usleep(10'000'000);
+        // }
+
+        // int w = e2ee_wait(&econn, SOTER_DEAD_DT * 1000);
+        int w = rudp_conn_wait(conn, SOTER_DEAD_DT * 1000);
         if (w == 0) {
             continue;
         } else if (w < 0) {
@@ -88,17 +95,16 @@ int main(){
             break;
         }
 
-        protopack *r = e2ee_recv(&echan);
+        // protopack *r = e2ee_recv(&econn);
+        protopack *r = soter2_irecv(conn);
         printf("> %.*s  (dps: %f, gseq: %u)\n", r->d_size, r->data, soter2_get_DPS(&intr), r->seq);
-        free(r);
+        // free(r);
 
     }
 
-    e2ee_send(&echan, "FIN", 3);
-
     // flushing incoming packets
-    if (0 < e2ee_wait(&echan, 2000)){
-        protopack *r = e2ee_recv(&echan);
+    if (0 < e2ee_wait(&econn, 2000)){
+        protopack *r = e2ee_recv(&econn);
         printf("> %.*s\n", r->d_size, r->data);
         free(r);
     }

@@ -1,8 +1,7 @@
-#include <stdint.h>
-#include <packproto/proto.h>
-#include <lownet/core.h>
+#include "_modules.h"
 
 #ifndef RUDP_PACKETS_H
+#define RUDP_PACKETS_H
 
 typedef enum {
     RUDP_STATE_INITED,
@@ -17,8 +16,7 @@ typedef struct {
     protopack      *copy_pack;
     rudp_pkt_state  state;
 
-    int      retransmit_count;
-    nnet_fd  nfd;
+    int retransmit_count;
 } rudp_pending_pkt;
 
 int rudp_pkt_make(
@@ -26,14 +24,7 @@ int rudp_pkt_make(
     
     protopack     *pack, 
     rudp_pkt_state state,
-    uint32_t       seq,
-    nnet_fd       *nfd
+    uint32_t       seq
 );
 
-typedef struct {
-    protopack *pack;
-    nnet_fd    nfd;
-} rudp_wrpkt;
-
 #endif
-#define RUDP_PACKETS_H

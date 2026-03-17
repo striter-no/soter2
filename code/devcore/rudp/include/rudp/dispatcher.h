@@ -1,87 +1,59 @@
-#include <providers/sender.h>
-#include <providers/listener.h>
-#include <base/prot_table.h>
-#include "channels.h"
+#include "_modules.h"
+#include "connection.h"
 
 #ifndef RUDP_DISPATCHER_H
-
-#ifndef RUDP_RETRANSMISSION_CAP
-#define RUDP_RETRANSMISSION_CAP 10
-#endif
-
-#ifndef RUDP_TIMEOUT
-#define RUDP_TIMEOUT 200
-#endif
-
-#ifndef RUDP_REORDER_WINDOW
-#define RUDP_REORDER_WINDOW     128
-
-#endif
+#define RUDP_DISPATCHER_H
 
 typedef struct {
-    pvd_sender   *sender;
+    pvd_sender  *sender;
+    prot_queue   passed_pkts;
+    mt_eventsock ev_passed;
 
-    prot_table    channels;
-    prot_queue    passed_packs;
-    prot_queue    outgoing_packs;
+    prot_table  connections;
+    uint32_t    self_uid;
 
-    mt_eventsock  outgoing_fd;
-    mt_eventsock  newpack_fd;
-    mt_eventsock  newchan_fd;
-
-    pthread_t     daemon;
-    atomic_bool   is_active;
-
-    uint32_t      self_uid;
+    pthread_t   daemon;
+    atomic_bool is_running;
 } rudp_dispatcher;
 
+// -- creation
 int rudp_dispatcher_new(
-    rudp_dispatcher *d, pvd_sender *s, uint32_t self_uid
+    rudp_dispatcher *disp, 
+    pvd_sender *sender,
+    uint32_t self_uid
 );
 
-void rudp_dispatcher_end(
-    rudp_dispatcher *d
+int rudp_dispatcher_end(rudp_dispatcher *disp);
+
+// -- interface
+
+int rudp_est_connection(
+    rudp_dispatcher *disp, 
+    rudp_connection **out_conn,
+    uint32_t other_UID,
+    nnet_fd  *nfd
+);
+
+int rudp_get_connection(
+    rudp_dispatcher *disp, 
+    uint32_t UID,
+    rudp_connection **conn
+);
+
+int rudp_close_conncetion(
+    rudp_dispatcher *disp, 
+    uint32_t UID
+);
+
+// -- system
+
+int rudp_dispatcher_pass(
+    rudp_dispatcher *disp, 
+    protopack *pkt
 );
 
 int rudp_dispatcher_run(
-    rudp_dispatcher *d
-);
-
-int rudp_dispatcher_send(
-    rudp_dispatcher *d,
-    protopack       *pack,
-    nnet_fd         *to
-);
-
-int rudp_direct_send(
-    rudp_dispatcher *d,
-    rudp_channel    *chan,
-    protopack       *pack
-);
-
-int rudp_dispatcher_pass(
-    rudp_dispatcher *d,
-    protopack       *pack,
-    nnet_fd         *from
-);
-
-// -- channels
-int rudp_dispatcher_chan_new(
-    rudp_dispatcher *d,
-    nnet_fd *client_nfd,
-    uint32_t client_uid
-);
-
-int rudp_dispatcher_chan_get(
-    rudp_dispatcher *d,
-    uint32_t client_uid,
-    rudp_channel    **channel
-);
-
-int rudp_dispatcher_chan_wait(
-    rudp_dispatcher *d,
-    uint32_t client_uid
+    rudp_dispatcher *disp
 );
 
 #endif
-#define RUDP_DISPATCHER_H

@@ -1,466 +1,299 @@
-#include <netinet/in.h>
-#include <pthread.h>
-#include <rudp/dispatcher.h>
-#include <rudp/channels.h>
-#include <rudp/packets.h>
+#include "rudp/_modules.h"
+#include "rudp/packets.h"
 #include <packproto/protomsgs.h>
-#include <unistd.h>
+#include <rudp/dispatcher.h>
+#include <stdint.h>
 
+// -- creation
 int rudp_dispatcher_new(
-    rudp_dispatcher *d, 
-    pvd_sender *s,
+    rudp_dispatcher *disp, 
+    pvd_sender *sender,
+
     uint32_t self_uid
 ){
-    if (!d || !s) return -1;
+    if (!disp || !sender) return -1;
 
-    if (0 > mt_evsock_new(&d->newchan_fd))  return -1;
-    if (0 > mt_evsock_new(&d->newpack_fd))  return -1;
-    if (0 > mt_evsock_new(&d->outgoing_fd)) return -1;
+    disp->self_uid = self_uid;
+    disp->sender = sender;
 
-    d->sender = s;
-    d->self_uid = self_uid;
-
-    prot_queue_create(sizeof(rudp_wrpkt), &d->passed_packs);
-    prot_queue_create(sizeof(rudp_wrpkt), &d->outgoing_packs);
-    prot_table_create(
-        sizeof(uint32_t), sizeof(rudp_channel*), DYN_OWN_BOTH, &d->channels
-    );
-
-    d->daemon = 0;
-    atomic_store(&d->is_active, false);
-    return 0;
-}
-
-void rudp_dispatcher_end(
-    rudp_dispatcher *d
-){
-    if (!d) return;
-
-    atomic_store(&d->is_active, false);
-    pthread_join(d->daemon, NULL);
-
-    for (size_t i = 0; i < d->channels.table.array.len; i++){
-        dyn_pair *p = dyn_array_at(&d->channels.table.array, i);
-        rudp_channel_end(*((rudp_channel**)p->second));
-        free(*((rudp_channel**)p->second));
-    }
-
-    for (size_t i = 0; i < d->passed_packs.arr.array.len; i++){
-        rudp_wrpkt pack;
-        prot_queue_pop(&d->passed_packs, &pack);
-        free(pack.pack);
-    }
-
-    prot_queue_end(&d->passed_packs);
-    prot_queue_end(&d->outgoing_packs);
-    prot_table_end(&d->channels);
-
-    mt_evsock_close(&d->newchan_fd);
-    mt_evsock_close(&d->newpack_fd);
-    mt_evsock_close(&d->outgoing_fd);
-}
-
-static void *rudp_dispatcher_worker(void *_args);
-int rudp_dispatcher_run(
-    rudp_dispatcher *d
-){
-    if (!d) return -1;
-
-    atomic_store(&d->is_active, true);
-    int r = pthread_create(&d->daemon, NULL, rudp_dispatcher_worker, d);
-    if (r < 0){
-        atomic_store(&d->is_active, false);
-        return r;
-    }
-
-    return 0;
-}
-
-int rudp_dispatcher_pass(
-    rudp_dispatcher *d,
-    protopack       *pack,
-    nnet_fd         *from
-){
-    if (!d || !pack) return -1;
-
-    prot_queue_push(&d->passed_packs, &(rudp_wrpkt){
-        .nfd  = *from,
-        .pack = pack
-    });
-
-    // printf("!! notified newpack!\n");
-    mt_evsock_notify(&d->newpack_fd);
-
-    return 0;
-}
-
-int rudp_dispatcher_send(
-    rudp_dispatcher *d,
-    protopack       *pack,
-    nnet_fd         *to
-){
-    if (!d || !pack) return -1;
-
-    prot_queue_push(&d->outgoing_packs, &(rudp_wrpkt){
-        .nfd  = *to,
-        .pack = udp_copy_pack(pack)
-    });
-
-    // printf("!! notified outgoing!\n");
-    mt_evsock_notify(&d->outgoing_fd);
-
-    return 0;
-}
-
-int rudp_direct_send(
-    rudp_dispatcher *d,
-    rudp_channel    *chan,
-    protopack       *pack
-){
-    if (!d || !pack) return -1;
-
-    if (prot_array_len(&chan->pending_queue) >= MAX_WINDOW_SIZE){
-        return 1;
-    }
-
-    prot_queue_push(&d->outgoing_packs, &(rudp_wrpkt){
-        .nfd  = chan->client_nfd,
-        .pack = udp_copy_pack(pack)
-    });
-
-    // printf("!! notified outgoing!\n");
-    mt_evsock_notify(&d->outgoing_fd);
-
-    return 0;
-}
-
-// -- channels
-int rudp_dispatcher_chan_new(
-    rudp_dispatcher *d,
-    nnet_fd *client_nfd,
-    uint32_t client_uid
-){
-    if (!d) return -1;
-    prot_table_lock(&d->channels);
-
-    rudp_channel **existing_ = prot_table_get(&d->channels, &client_uid);
-    rudp_channel *existing = existing_? *existing_: NULL;
-    
-    if (existing != NULL){
-        existing->client_nfd = *client_nfd;
-        prot_table_unlock(&d->channels);
-        mt_evsock_notify(&d->newchan_fd);
-        return 0;
-    }
-
-    rudp_channel *c = malloc(sizeof(rudp_channel));
-    if (0 > rudp_channel_new(c, client_nfd, d->self_uid, client_uid)){
-        prot_table_unlock(&d->channels);
+    if (0 > mt_evsock_new(&disp->ev_passed)){
         return -1;
     }
 
-    prot_table_set(&d->channels, &client_uid, &c);
-    prot_table_unlock(&d->channels);
-
-    mt_evsock_notify(&d->newchan_fd);
-    return 0;
-}
-
-int rudp_dispatcher_chan_get(
-    rudp_dispatcher *d,
-    uint32_t         client_uid,
-    rudp_channel    **channel
-){
-    if (!d) return -1;
-
-    // printf("[rudp_dispatcher_chan_get] before\n");
-    rudp_channel **chan = ((rudp_channel**)prot_table_get(
-        &d->channels, 
-        &client_uid
-    ));
-    // printf("[rudp_dispatcher_chan_get] after\n");
-
-    if (!chan || !(*chan)) return -1;
-    *channel = *chan;
-
-    return 0;
-}
-
-int rudp_dispatcher_chan_wait(
-    rudp_dispatcher *d,
-    uint32_t client_uid
-){
-    if (!d) return -1;
-    while (true){
-        int r = mt_evsock_wait(&d->newchan_fd, -1);
-        if (r <= 0) continue;
-
-        mt_evsock_drain(&d->newchan_fd);
-        rudp_channel *chan = NULL;
-        if (0 == rudp_dispatcher_chan_get(d, client_uid, &chan))
-            return 0;
+    if (0 > prot_queue_create(sizeof(protopack*), &disp->passed_pkts)){
+        mt_evsock_close(&disp->ev_passed);
+        return -1;
     }
+
+    if (0 > prot_table_create(
+        sizeof(uint32_t), sizeof(rudp_connection*), 
+        DYN_OWN_BOTH, &disp->connections
+    )){
+        prot_queue_end(&disp->passed_pkts);
+        mt_evsock_close(&disp->ev_passed);
+        return -1;
+    }
+
+    disp->daemon = 0;
+    atomic_store(&disp->is_running, false);
+    return 0;
+}
+
+int rudp_dispatcher_end(rudp_dispatcher *disp){
+    if (!disp) return -1;
+
+    // -- joining
+    atomic_store(&disp->is_running, false);
+    pthread_join(disp->daemon, NULL);
+
+    // -- clearing
+
+    protopack *pkt;
+    while (0 == prot_queue_pop(&disp->passed_pkts, &pkt)){
+        if (!pkt) continue;
+        free(pkt);
+    }
+
+    for (size_t i = 0; i < disp->connections.table.array.len; i++){
+        dyn_pair *pair = dyn_array_at(&disp->connections.table.array, i);
+        if (!pair) continue;
+
+        if (pair->second){
+            rudp_conn_close(*((rudp_connection**)pair->second));
+            free(*((rudp_connection**)pair->second));
+        }
+    }
+
+    // -- ending
+
+    prot_queue_end(&disp->passed_pkts);
+    prot_table_end(&disp->connections);
+
+    return 0;
+}
+
+// -- connection managing
+int rudp_est_connection(
+    rudp_dispatcher *disp, 
+    rudp_connection **out_conn,
+    uint32_t other_UID,
+    nnet_fd  *nfd
+){
+    if (!disp || !out_conn) return -1;
+
+    *out_conn = malloc(sizeof(**out_conn));
+    if (!out_conn) return -1;
+
+    if (0 > rudp_conn_new(*out_conn, disp->sender, disp->self_uid, other_UID, *nfd)){
+        free(*out_conn);
+        return -1;
+    }
+
+    printf("[estconn] connection with %u established\n", other_UID);
+    prot_table_set(&disp->connections, &other_UID, out_conn);
+    return 0;
+}
+
+int rudp_get_connection(
+    rudp_dispatcher *disp, 
+    uint32_t UID,
+    rudp_connection **conn
+){
+    if (!disp || !conn) return -1;
+
+    *conn = *(rudp_connection **)prot_table_get(&disp->connections, &UID);
+    if (!(*conn)) return -1;
+
+    return 0;
+}
+
+int rudp_close_conncetion(
+    rudp_dispatcher *disp, 
+    uint32_t UID
+){
+    if (!disp) return -1;
+
+    rudp_connection **conn = prot_table_get(&disp->connections, &UID);
+    if (!conn || !(*conn)) return -1;
+
+    rudp_conn_close(*conn);
+    free(*conn);
+
+    return prot_table_remove(&disp->connections, &UID);
+}
+
+// -- system
+
+int rudp_dispatcher_pass(
+    rudp_dispatcher *disp, 
+    protopack *pkt
+){
+    if (!disp || !pkt) return -1;
+
+    prot_queue_push(&disp->passed_pkts, &pkt);
+    mt_evsock_notify(&disp->ev_passed);
+
+    return 0;
+}
+
+static void *_rudp_dispatcher_worker(void *_args);
+int rudp_dispatcher_run(
+    rudp_dispatcher *disp
+){
+    if (!disp) return -1;
+    atomic_store(&disp->is_running, true);
+
+    int r = pthread_create(
+        &disp->daemon,
+        NULL,
+        &_rudp_dispatcher_worker,
+        disp
+    );
+
+    if (r < 0){
+        atomic_store(&disp->is_running, false);
+    }
+
+    return r;
 }
 
 // -- workers
 
-static void rudp_sender_worker(rudp_dispatcher *disp);
-static void rudp_reader_worker(rudp_dispatcher *disp);
-
-static void rudp_check_timeouts(rudp_dispatcher *disp);
-static void rudp_check_timeouts_chan(rudp_dispatcher *disp, rudp_channel *chan);
-
-// static void rudp_reordering(rudp_dispatcher *disp);
-static void rudp_reordering_chan(rudp_channel *chan);
-
-static void *rudp_dispatcher_worker(void *_args){
+static void _rudp_dispatcher_net_handler(rudp_dispatcher *disp, rudp_connection *conn, protopack *pkt);
+static void *_rudp_dispatcher_worker(void *_args){
     rudp_dispatcher *disp = _args;
 
-    struct pollfd fds[] = {
-        {.fd = disp->newpack_fd.client_fd,  .events = POLLIN},
-        {.fd = disp->outgoing_fd.client_fd, .events = POLLIN}
-    };
-    while (atomic_load(&disp->is_active)){
-        // int timeout = atomic_load(&disp->is_active) ? 10 : 0;
-        
-        int r = poll(fds, sizeof(fds)/sizeof(fds[0]), 10);
-        rudp_check_timeouts(disp);
-
-        if (r < 0) {
-            perror("rudp_dispactcher:poll()");
+    while (atomic_load(&disp->is_running)){
+        int r = mt_evsock_wait(&disp->ev_passed, 50);
+        if (r < 0){
+            perror("poll");
             continue;
         }
+
+        for (size_t i = 0; i < disp->connections.table.array.len;){
+            dyn_pair *pair = dyn_array_at(&disp->connections.table.array, i);
+            
+            // removing closed or dead connections
+            if (!pair || !pair->second) {
+                dyn_array_remove(&disp->connections.table.array, i);
+                continue;
+            }
+
+            rudp_connection *conn = *((rudp_connection**)pair->second);
+            if (conn->closed){
+                dyn_array_remove(&disp->connections.table.array, i);
+                continue;
+            }
+
+            _rudp_conn_timeouts(conn);
+            i++;
+        }
+
         if (r == 0) continue;
+        mt_evsock_drain(&disp->ev_passed);
+        
+        protopack *pkt;
+        if (0 > prot_queue_pop(&disp->passed_pkts, &pkt)){
+            continue;
+        }
 
-        if (fds[0].revents & POLLIN) {
-            mt_evsock_drain(&disp->newpack_fd);
-            rudp_reader_worker(disp);
+        uint32_t c_uid = pkt->h_from;
+        rudp_connection *connection = NULL;
+        if (0 > rudp_get_connection(disp, c_uid, &connection)){
+            fprintf(stderr, "[rudp][disp][worker] error: no connection established with %u\n", c_uid);
+            free(pkt);
+            continue;
         }
-        if (fds[1].revents & POLLIN) {
-            mt_evsock_drain(&disp->outgoing_fd);
-            rudp_sender_worker(disp);
-        }
+
+        _rudp_dispatcher_net_handler(disp, connection, udp_copy_pack(pkt));
+        free(pkt);
     }
-
+    
     return NULL;
 }
 
-// static void rudp_reordering(rudp_dispatcher *disp){
-//     prot_table_lock(&disp->channels);
-//     for (size_t i = 0; i < disp->channels.table.array.len; i++){
-//         dyn_pair *p = dyn_array_at(&disp->channels.table.array, i);
-//         rudp_reordering_chan(*((rudp_channel**)p->second));
-//     }
-//     prot_table_unlock(&disp->channels);
-// }
+static void _rudp_dispatcher_net_handler(rudp_dispatcher *disp, rudp_connection *conn, protopack *pkt){
+    if (pkt->packtype == PACK_DATA){
+        uint32_t seq = pkt->seq;
 
-static void rudp_reordering_chan(rudp_channel *chan){
-    prot_queue_lock(&chan->network_queue);
-    protopack *pack;
+        _rudp_conn_pass_net(conn, pkt);
+        _rudp_conn_reordering(conn);
 
-    while (0 == prot_queue_pop(&chan->network_queue, &pack)){        
-        if (!pack) break;
-
-        uint32_t expected = (chan->last_recved_seq == UINT32_MAX) ? 0 : chan->last_recved_seq + 1;
-        int32_t diff = (int32_t)(pack->seq - expected);
-
-        if (diff < 0) {
-            free(pack);
-            continue;
+        // printf("delta: %li\n", (int64_t)seq - (int64_t)conn->last_sended_ack);
+        if ((int64_t)seq - (int64_t)conn->last_sended_ack < 1) {
+            conn->last_sended_ack = seq;
+            // free(pkt);
+            return;
         }
-
-        if (diff > RUDP_REORDER_WINDOW) {
-            free(pack);
-            continue;
-        }
-
-        prot_array_lock(&chan->reorder_buffer);
         
-        size_t pos = 0;
-        bool duplicate = false;
-        size_t len = chan->reorder_buffer.array.len;
-
-        for (pos = 0; pos < len; pos++) {
-            protopack **existing = dyn_array_at(&chan->reorder_buffer.array, pos);
-            if ((*existing)->seq == pack->seq) {
-                duplicate = true; 
-                break;
-            }
-            if ((*existing)->seq > pack->seq) {
-                break;
-            }
-        }
-
-        if (!duplicate)
-            dyn_array_insert(&chan->reorder_buffer.array, pos, &pack);
-        else
-            free(pack);
-        
-        prot_array_unlock(&chan->reorder_buffer);
-    }
-    prot_queue_unlock(&chan->network_queue);
-
-    prot_array_lock(&chan->reorder_buffer);
-    
-    while (chan->reorder_buffer.array.len > 0) {
-        protopack **p_ptr = dyn_array_at(&chan->reorder_buffer.array, 0);
-        protopack *p = *p_ptr;
-
-        uint32_t next_needed = (chan->last_recved_seq == UINT32_MAX) ? 0 : chan->last_recved_seq + 1;
-
-        if (p->seq == next_needed) {
-            // printf("[rudp] got packet: %.*s\n", p->d_size, p->data);
-            prot_queue_push(&chan->reoredered_queue, &p);
-            chan->last_recved_seq = p->seq;
-            mt_evsock_notify(&chan->reordered_fd);
-            dyn_array_remove(&chan->reorder_buffer.array, 0);
+        conn->last_sended_ack = seq;
+        protopack *msg = proto_msg_quick(
+            conn->s_uid, conn->c_uid, seq, PACK_RACK
+        );
+        conn->last_sended_ack = seq;
+        if (msg) {
+            pvd_sender_send(conn->sender, msg, &conn->nfd);
+            free(msg);
         } else {
-            break; 
-        }
-    }
-    
-    prot_array_unlock(&chan->reorder_buffer);
-}
-
-static void rudp_check_timeouts(rudp_dispatcher *disp){
-    prot_table_lock(&disp->channels);
-    for (size_t i = 0; i < disp->channels.table.array.len; i++){
-        dyn_pair *p = dyn_array_at(&disp->channels.table.array, i);
-        rudp_check_timeouts_chan(disp, *((rudp_channel**)p->second));
-    }
-    prot_table_unlock(&disp->channels);
-}
-
-static void rudp_check_timeouts_chan(rudp_dispatcher *disp, rudp_channel *chan){
-    prot_array_lock(&chan->pending_queue);
-
-    int64_t now_ms = mt_time_get_millis();
-
-    for (size_t i = 0; i < chan->pending_queue.array.len; ){
-        rudp_pending_pkt *pkt = dyn_array_at(&chan->pending_queue.array, i);
-
-        if (pkt->retransmit_count >= RUDP_RETRANSMISSION_CAP){
-            free(pkt->copy_pack);
-            pkt->copy_pack = NULL;
-            dyn_array_remove(&chan->pending_queue.array, i);
-            fprintf(stderr, "[rudpdisp] retransmission cap hit for seq %u\n", pkt->seq);
-            continue;
+            fprintf(stderr, "[rudp][disp][nhandler] error: failed to compose and send RUDP ACK to %u\n", conn->c_uid);
         }
 
-        int64_t backoff_ms = (int64_t)RUDP_TIMEOUT * (1ULL << pkt->retransmit_count);
-        int64_t dt_ms = now_ms - pkt->timestamp;
+        // free(pkt);
+        // not freeing packet, passing to connection
+    } else if (pkt->packtype == PACK_RACK){
+        prot_array_lock(&conn->pkts_fhost);
 
-        // if (backoff_ms > 2000) backoff_ms = 2000;
+        bool was_ack = false;
 
-        if (dt_ms >= backoff_ms) {
-            pvd_sender_send(disp->sender, pkt->copy_pack, &pkt->nfd);
-            printf("retransmiting seq %u: %d/%d (dt: %llu >= boff: %llu)\n",
-                   pkt->seq,
-                   pkt->retransmit_count + 1,
-                   RUDP_RETRANSMISSION_CAP,
-                   (unsigned long long)dt_ms,
-                   (unsigned long long)backoff_ms);
+        for (size_t i = 0; i < conn->pkts_fhost.array.len; ){
+            rudp_pending_pkt *ppkt = prot_array_at(&conn->pkts_fhost, i);
 
-            pkt->timestamp = now_ms;
-            pkt->retransmit_count++;
-        }
-
-        i++;
-    }
-
-    prot_array_unlock(&chan->pending_queue);
-}
-
-static void rudp_sender_worker(rudp_dispatcher *disp){
-    rudp_wrpkt pkt = {0};
-    while (!(0 > prot_queue_pop(&disp->outgoing_packs, &pkt) || !pkt.pack)){
-        naddr_t addr = ln_nfd2addr(&pkt.nfd);
-        // printf("[rudp_sender_worker] addr: %s:%u\n", addr.ip.v4.ip, addr.ip.v4.port);
-        protopack *rpack = pkt.pack;
-
-        uint32_t peer_id = rpack->h_to;
-        rudp_channel *chan = NULL;
-        if (0 > rudp_dispatcher_chan_get(disp, peer_id, &chan)){
-            // printf("[rudp_sender_worker] creating new channel\n");
-            rudp_dispatcher_chan_new(disp, &pkt.nfd, peer_id);
-            // printf("[rudp_sender_worker] created channel\n");
-
-            rudp_dispatcher_chan_get(disp, peer_id, &chan);
-        }
-
-        rudp_channel_send(disp->sender, chan, rpack, &pkt.nfd);
-        free(rpack);
-    }
-}
-
-static void rudp_reader_worker(rudp_dispatcher *disp){
-    rudp_wrpkt pkt = {0};
-    
-    while (!(0 > prot_queue_pop(&disp->passed_packs, &pkt) || !pkt.pack)){
-        rudp_channel *chan = NULL;
-        if (0 > rudp_dispatcher_chan_get(disp, pkt.pack->h_from, &chan)){
-            // printf("[rudp_reader_worker] created new channel\n");
-            rudp_dispatcher_chan_new(disp, &pkt.nfd, pkt.pack->h_from);
-            rudp_dispatcher_chan_get(disp, pkt.pack->h_from, &chan);
-        }
-
-        
-        // freeing packet inside handlers
-        protopack *rpack = pkt.pack;
-        printf("[reader] get new message (%s)\n", PROTOPACK_TYPES_CHAR[rpack->packtype]);
-        
-        if (rpack->packtype == PACK_DATA){
-            uint32_t seq = rpack->seq;
-
-            protopack *copy = udp_copy_pack(rpack);
-            if (copy) {
-                prot_queue_push(&chan->network_queue, &copy);
-                rudp_reordering_chan(chan);
-            }
-
-            chan->last_ack_sent = seq;
-
-            protopack *msg = proto_msg_quick(
-                disp->self_uid, rpack->h_from, seq, PACK_RACK
-            );
-            if (msg) {
-                pvd_sender_send(disp->sender, msg, &pkt.nfd);
-                free(msg);
-            }
-        } else if (rpack->packtype == PACK_RACK){
-            prot_array_lock(&chan->pending_queue);
-
-            bool was_ack = false;
-
-            for (size_t i = 0; i < chan->pending_queue.array.len; ){
-                rudp_pending_pkt *ppkt = prot_array_at(&chan->pending_queue, i);
-
-                if (ppkt->seq != rpack->seq){
-                    i++;
-                    continue;
-                }
-
-                chan->last_ack_received = rpack->seq;
+            // cumulative ACK
+            // removing all pending packets from array if greater ACK recved
+            if (ppkt->seq <= pkt->seq){
                 if (ppkt->copy_pack) free(ppkt->copy_pack);
-                prot_array_remove(&chan->pending_queue, i);
+                prot_array_remove(&conn->pkts_fhost, i);
                 was_ack = true;
-                break;
-            }
-
-            if (!was_ack){
-                if (rpack->seq < chan->next_seq) {
-                    fprintf(stderr, "[debug] duplicate/late ACK: %u\n", rpack->seq);
-                } else {
-                    fprintf(stderr, "[warn] impossible ACK: %u (next_seq=%u)\n",
-                            rpack->seq, chan->next_seq);
+                
+                if (conn->last_recved_ack == UINT32_MAX || pkt->seq > conn->last_recved_ack) {
+                    conn->last_recved_ack = pkt->seq;
                 }
+                
+            } else {
+                i++;
             }
-
-            prot_array_unlock(&chan->pending_queue);
-        } else {
-            fprintf(stderr, "to worker passed unknown packet w/ type %d\n", rpack->packtype);
         }
 
-        free(rpack);
+        if (!was_ack){
+            if (pkt->seq < conn->current_seq) {
+                fprintf(stderr, "[debug] duplicate/late ACK: %u\n", pkt->seq);
+            } else {
+                fprintf(stderr, "[warn] impossible ACK: %u (current seq: %u)\n",
+                        pkt->seq, conn->current_seq);
+            }
+        }
+
+        prot_array_unlock(&conn->pkts_fhost);
+
+        free(pkt);
+    } else if (pkt->packtype == PACK_FIN) {
+
+        uint32_t remote_uid = conn->c_uid;
+        fprintf(stderr, "[rudp][disp] FIN received from %u, closing connection\n", remote_uid);
+
+        mt_evsock_notify(&conn->ev_reordered);
+        rudp_close_conncetion(disp, remote_uid);
+        
+        free(pkt);
+        return;
+
+    } else {
+        fprintf(
+            stderr, 
+            "[rudp][disp][nhandler] error: to handler passed unknown packet with type %s\n", 
+            PROTOPACK_TYPES_CHAR[pkt->packtype]
+        );
+
+        free(pkt);
     }
 }
