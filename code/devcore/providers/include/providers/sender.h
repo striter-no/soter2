@@ -23,7 +23,7 @@ int  pvd_sender_new(pvd_sender *s, ln_usocket *p_usocket);
 void pvd_sender_end(pvd_sender *s);
 int  pvd_sender_start(pvd_sender *s);
 
-int pvd_sender_send(pvd_sender *s, protopack *packet, nnet_fd *to);
+int pvd_sender_send(pvd_sender *s, protopack *packet, const nnet_fd *to);
 
 #endif
 #define PROVIDER_SENDER

@@ -3,6 +3,7 @@
 #include <pthread.h>
 #include <stdint.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 int soter2_intr_init(
     soter2_interface *intr
@@ -201,7 +202,7 @@ bool soter2_irunning(soter2_interface *intr){
 
 // -- user-connections
 
-int soter2_inew_conn(soter2_interface *intr, rudp_connection **conn, nnet_fd *nfd, uint32_t c_uid){
+int soter2_inew_conn(soter2_interface *intr, rudp_connection **conn, const nnet_fd *nfd, uint32_t c_uid){
     if (!intr || !conn) return -1;
     return rudp_est_connection(&intr->rudp_disp, conn, c_uid, nfd);
 }
@@ -247,14 +248,15 @@ float soter2_get_DPS(soter2_interface *intr){
 
 // -- workers
 
-static int ping_iter(peer_info *info, void *ctx);
-static int gossip_iter(peer_info *info, void *ctx);
+static int ping_iter(const peer_info *info, void *ctx);
+static int gossip_iter(const peer_info *info, void *ctx);
 static int state_iter(soter2_interface *intr);
 
 static void *iter_daemon(void *_args){
     soter2_interface *intr = _args;
-     
+
     while (atomic_load(&intr->is_running)){
+        intr->ctx.now_ms = mt_time_get_seconds_monocoarse();
         int r = mt_evsock_wait(&intr->listener.newpack_es, 3 * 1000);
         mt_evsock_drain(&intr->listener.newpack_es);
         
@@ -276,19 +278,35 @@ static void *iter_daemon(void *_args){
         //     intr->packets_translated = 0;
         // }
 
-        if (intr->state_req_dt != 0 && (mt_time_get_seconds_monocoarse() - intr->state_last_called >= intr->state_req_dt)){
+        if (intr->state_req_dt != 0 && (intr->ctx.now_ms - intr->state_last_called >= intr->state_req_dt)){
             state_iter(intr);
-            intr->state_last_called = mt_time_get_seconds_monocoarse();
+            intr->state_last_called = intr->ctx.now_ms;
         }
 
-        // if (intr->packet_rate <= SOTER_LOW_PACKET_RATE)
-        // peers_db_foreach(&intr->pdb, ping_iter, &intr->ctx);
-        // if (mt_time_get_seconds_monocoarse() - intr->gsyst.last_gossiped >= SOTER_GOSSIP_DT){
-        //     gossip_cleanup(&intr->gsyst);
+        if (intr->packet_rate <= SOTER_LOW_PACKET_RATE){
+            printf("pinging!\n");
 
-        //     peers_db_foreach(&intr->pdb, gossip_iter, &intr->ctx);
-        //     intr->gsyst.last_gossiped = mt_time_get_seconds_monocoarse();
-        // }
+            peer_info *snapshot = NULL;
+            printf("getting snapshot...\n");
+            size_t snapshot_sz = peers_db_snapshot(&intr->pdb, &snapshot);
+            printf("got snapshot\n");
+
+            for (size_t i = 0; i < snapshot_sz; i++){
+                peer_info info = snapshot[i];
+                if (!ping_iter(&info, &intr->ctx)) continue;
+
+                peers_db_remove(&intr->pdb, info.UID);
+            }
+
+            free(snapshot);
+            printf("ping done\n");
+
+            // if (now_ms - intr->gsyst.last_gossiped >= SOTER_GOSSIP_DT){
+            //     gossip_cleanup(&intr->gsyst);
+            //     peers_db_foreach(&intr->pdb, gossip_iter, &intr->ctx);
+            //     intr->gsyst.last_gossiped = now_ms;
+            // }
+        }
 
         if (r == 0) continue;
         if (r < 0) {
@@ -331,25 +349,22 @@ static int state_iter(soter2_interface *intr){
     return 0;
 }
 
-static int ping_iter(peer_info *info, void *ctx_){ app_context *ctx = ctx_;
-    uint32_t stamp = mt_time_get_seconds_monocoarse();
-    // printf("for %u last_seen DT: %u\n", info->UID, stamp - info->last_seen);
-    if (stamp - info->last_seen >= SOTER_DEAD_DT){
+static int ping_iter(const peer_info *info, void *ctx_){ app_context *ctx = ctx_;
+    if (ctx->now_ms - info->last_seen >= SOTER_DEAD_DT){
         printf("Dead peer detected: %u\n", info->UID);
         return 1;
     }
 
-    if (stamp - info->last_seen >= SOTER_REPING_DT){
+    if (ctx->now_ms - info->last_seen >= SOTER_REPING_DT){
         protopack *ping = proto_msg_quick(ctx->rudp->self_uid, info->UID, 0, PACK_PING);
         pvd_sender_send(ctx->sender, ping, &info->nfd);
-        info->last_seen = stamp;
         free(ping);
     }
 
     return 0;
 }
 
-static int gossip_iter(peer_info *info, void *ctx_){ app_context *ctx = ctx_;
+static int gossip_iter(const peer_info *info, void *ctx_){ app_context *ctx = ctx_;
     // we dont check dt because of 1 check in iter() daemon
     // do not spam to all peers
     if (rand() % 2 == 0) return 0;

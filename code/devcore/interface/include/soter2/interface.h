@@ -75,7 +75,7 @@ int  soter2_intr_wait_state(soter2_interface *intr, int timeout, state_request *
 void soter2_iconnect  (soter2_interface *intr, naddr_t address, uint32_t UID);
 int  soter2_istatewait(soter2_interface *intr, uint32_t client_uid, peer_state state, peer_info *info);
 
-int soter2_inew_conn(soter2_interface *intr, rudp_connection **conn, nnet_fd *nfd, uint32_t client_uid);
+int soter2_inew_conn(soter2_interface *intr, rudp_connection **conn, const nnet_fd *nfd, uint32_t client_uid);
 int soter2_iget_conn(soter2_interface *intr, rudp_connection **conn, uint32_t client_uid);
 
 int soter2_e2ee_wrap(soter2_interface *intr, rudp_connection *conn, e2ee_connection *wrapped, unsigned char other_pubkey[CRYPTO_PUBKEY_BYTES]);

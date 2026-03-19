@@ -1,6 +1,6 @@
 #include <soter2/handlers.h>
 
-int soter2_hnd_ACK(protopack *pck, nnet_fd *nfd, pvd_sender *s, void *_ctx){
+int soter2_hnd_ACK(protopack *pck, const nnet_fd *nfd, pvd_sender *s, void *_ctx){
     if (!_ctx) return -1;
     (void)nfd;
 
@@ -23,7 +23,7 @@ int soter2_hnd_ACK(protopack *pck, nnet_fd *nfd, pvd_sender *s, void *_ctx){
     return 0;
 }
 
-int soter2_hnd_PUNCH(protopack *pck, nnet_fd *nfd, pvd_sender *s, void *_ctx){
+int soter2_hnd_PUNCH(protopack *pck, const nnet_fd *nfd, pvd_sender *s, void *_ctx){
     if (!_ctx) return -1;
 
     app_context *ctx = _ctx;
@@ -56,7 +56,7 @@ int soter2_hnd_PUNCH(protopack *pck, nnet_fd *nfd, pvd_sender *s, void *_ctx){
     return 0;
 }
 
-int soter2_hnd_PING(protopack *pck, nnet_fd *nfd, pvd_sender *s, void *_ctx){
+int soter2_hnd_PING(protopack *pck, const nnet_fd *nfd, pvd_sender *s, void *_ctx){
     app_context *ctx = _ctx;
     
     protopack *pong = proto_msg_quick(
@@ -73,7 +73,7 @@ int soter2_hnd_PING(protopack *pck, nnet_fd *nfd, pvd_sender *s, void *_ctx){
     return 0;
 }
 
-int soter2_hnd_PONG(protopack *pck, nnet_fd *nfd, pvd_sender *s, void *_ctx){
+int soter2_hnd_PONG(protopack *pck, const nnet_fd *nfd, pvd_sender *s, void *_ctx){
     app_context *ctx = _ctx;
     (void)nfd;
     (void)s;
@@ -86,7 +86,7 @@ int soter2_hnd_PONG(protopack *pck, nnet_fd *nfd, pvd_sender *s, void *_ctx){
     return 0;
 }
 
-int soter2_hnd_GOSSIP(protopack *pck, nnet_fd *nfd, pvd_sender *s, void *_ctx){
+int soter2_hnd_GOSSIP(protopack *pck, const nnet_fd *nfd, pvd_sender *s, void *_ctx){
     app_context *ctx = _ctx;
     (void)nfd;
     (void)s;
@@ -96,7 +96,7 @@ int soter2_hnd_GOSSIP(protopack *pck, nnet_fd *nfd, pvd_sender *s, void *_ctx){
     return 0;
 }
 
-int soter2_hnd_STATE (protopack *pck, nnet_fd *nfd, pvd_sender *s, void *_ctx){
+int soter2_hnd_STATE (protopack *pck, const nnet_fd *nfd, pvd_sender *s, void *_ctx){
     app_context *ctx = _ctx;
     (void)nfd;
     (void)s;

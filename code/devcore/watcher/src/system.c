@@ -62,7 +62,7 @@ int watcher_handler_reg(watcher *w, uint8_t type, watcher_handler handler){
     return 0;
 }
 
-int watcher_pass(watcher *w, protopack *pack, nnet_fd *from_who){
+int watcher_pass(watcher *w, protopack *pack, const nnet_fd *from_who){
     if (!w || !pack) return -1;
     listener_packet pkt = {
         .pack = pack,

@@ -17,7 +17,7 @@ typedef struct {
     mt_eventsock      new_request;
 } state_server;
 
-static int state_handler(protopack *pck, nnet_fd *nfd, pvd_sender *s, void *_ctx){
+static int state_handler(protopack *pck, const nnet_fd *nfd, pvd_sender *s, void *_ctx){
     // extract data from pck
     state_server *serv = _ctx;
     (void)nfd;

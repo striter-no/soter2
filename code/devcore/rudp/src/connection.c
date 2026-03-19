@@ -312,7 +312,7 @@ int _rudp_conn_timeouts(rudp_connection *conn, int64_t now_ms){
             continue;
         }
 
-        int64_t backoff_ms = conn->avg_rtt_ms * (1.5 + (0.5 * pkt->retransmit_count));
+        int64_t backoff_ms = conn->avg_rtt_ms * (1.5 + (2 << pkt->retransmit_count));
         int64_t dt_ms = now_ms - pkt->timestamp;
 
         if (dt_ms >= backoff_ms) {

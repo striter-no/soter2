@@ -82,7 +82,7 @@ int peers_db_schange(peers_db *db, uint32_t UID, peer_state new_state){
     return 0;
 }
 
-int peers_db_unfd(peers_db *db, uint32_t UID, nnet_fd *nfd){
+int peers_db_unfd(peers_db *db, uint32_t UID, const nnet_fd *nfd){
     if (!db) return -1;
     prot_table_lock(&db->data);
     
@@ -114,6 +114,7 @@ int peers_db_utime(peers_db *db, uint32_t UID){
 
     info->last_seen = mt_time_get_seconds_monocoarse();
 
+    prot_table_unlock(&db->data);
     return 0;
 }
 
@@ -237,30 +238,18 @@ int peers_db_wait(peers_db *db, uint32_t UID, peer_state state, peer_info *info)
     }
 }
 
-void peers_db_foreach(peers_db *db, peer_iter_fn func, void *ctx) {
+size_t peers_db_snapshot(peers_db *db, peer_info **out){
+    size_t o_size = 0;
     prot_table_lock(&db->data);
-    for (size_t i = 0; i < db->data.table.array.len;) {
+    *out = malloc(sizeof(peer_info) * db->data.table.array.len);
+
+    for (size_t i = 0; i < db->data.table.array.len; i++) {
         dyn_pair *pair = dyn_array_at(&db->data.table.array, i);
-    
-        if (!pair) {
-            i++; 
-            continue; 
-        }
-        
-        int r = func((peer_info*)pair->second, ctx);
+        if (!pair) continue; 
 
-        if (r == 1){
-            void *key_to_free = pair->first;
-            void *val_to_free = pair->second;
-            
-            dyn_array_remove(&db->data.table.array, i);
-            
-            free(key_to_free);
-            free(val_to_free);
-            continue;
-        }
-
-        i++;
+        (*out)[o_size++] = *(peer_info*)pair->second;
     }
     prot_table_unlock(&db->data);
+
+    return o_size;
 }

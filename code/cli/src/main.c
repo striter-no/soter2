@@ -2,6 +2,53 @@
 #include <errno.h>
 #include <unistd.h>
 
+void *sender_thread(void *_args){
+    rudp_connection *conn = _args;
+
+    int i = 0;
+    while (!conn->closed){
+        char data[200]; snprintf(data, 50, "Hello %d", i);
+
+        prot_array_lock(&conn->pkts_fhost);
+        int in_flight = conn->pkts_fhost.array.len;
+        prot_array_unlock(&conn->pkts_fhost);
+
+        if (in_flight < 16) {
+            soter2_isend(conn, data, strlen(data));
+            i++;
+        } else {
+            // printf("in_flight >= 16: %d\n", in_flight);
+            usleep(10000);
+        }
+    }
+
+    return NULL;
+}
+
+void *reader_thread(void *_args){
+    rudp_connection *conn = _args;
+    
+    while (!conn->closed){
+        int w = rudp_conn_wait(conn, conn->ack_timeout_ms);
+        if (w == 0) {
+            usleep(10000);
+            continue;
+        } else if (w < 0) {
+            if (errno == EAGAIN || errno == EINTR) continue;
+            perror("[main][loop] iwait");
+            break;
+        }
+
+        protopack *r;
+        while ((r = soter2_irecv(conn)) != NULL) {
+            printf("> %.*s  (gseq: %u)\n", r->d_size, r->data, r->seq);
+            free(r);
+        }
+    }
+
+    return NULL;
+}
+
 int main(){
     srand(mt_time_get_seconds_monocoarse());
 
@@ -39,44 +86,18 @@ int main(){
     soter2_intr_statestop(&intr);
     soter2_inew_conn(&intr, &conn, &info.nfd, req.uid);
 
-    printf("[main] e2ee wrapping...\n");
-    e2ee_connection econn;
-    soter2_e2ee_wrap(&intr, conn, &econn, req.pubkey);
-    soter2_e2ee_handshake(&econn);
-    soter2_e2ee_end_handshake(&econn, -1);
+    // printf("[main] e2ee wrapping...\n");
+    // e2ee_connection econn;
+    // soter2_e2ee_wrap(&intr, conn, &econn, req.pubkey);
+    // soter2_e2ee_handshake(&econn);
+    // soter2_e2ee_end_handshake(&econn, -1);
 
-    printf("[main] e2ee hs done\n");
-    for (int i = 0; i < 500;){
-        if (econn.conn->closed) break;
-        
-        char data[200]; snprintf(data, 50, "Hello %d", i);
+    pthread_t sender, reader;
+    pthread_create(&sender, NULL, sender_thread, conn);
+    pthread_create(&reader, NULL, reader_thread, conn);
 
-        prot_array_lock(&conn->pkts_fhost);
-        int in_flight = conn->pkts_fhost.array.len;
-        prot_array_unlock(&conn->pkts_fhost);
-
-        if (in_flight < 16) {
-            e2ee_send(&econn, data, strlen(data));
-        } else usleep(10000);
-
-        int w = e2ee_wait(&econn, econn.conn->ack_timeout_ms);
-        if (w == 0) {
-            printf("[main][loop] skiped %d iter\n", i);
-            usleep(10000);
-            continue;
-        } else if (w < 0) {
-            if (errno == EAGAIN || errno == EINTR) continue;
-            perror("[main][loop] iwait");
-            break;
-        }
-
-        protopack *r;
-        while ((r = e2ee_recv(&econn)) != NULL) {
-            printf("> %.*s  (gseq: %u)\n", r->d_size, r->data, r->seq);
-            free(r);
-            i++;
-        }
-    }
+    pthread_join(reader, NULL);
+    pthread_join(sender, NULL);
 
     rudp_close_conncetion(&intr.rudp_disp, info.UID);
     free(conn);

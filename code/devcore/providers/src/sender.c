@@ -57,7 +57,7 @@ int pvd_sender_start(pvd_sender *s){
     return r;
 }
 
-int pvd_sender_send(pvd_sender *s, protopack *packet, nnet_fd *to){
+int pvd_sender_send(pvd_sender *s, protopack *packet, const nnet_fd *to){
     if (!s || !packet || !to) return -1;
 
     protopack *pkt = udp_copy_pack(packet);
