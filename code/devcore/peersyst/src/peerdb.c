@@ -112,7 +112,7 @@ int peers_db_utime(peers_db *db, uint32_t UID){
         return -1;
     }
 
-    info->last_seen = mt_time_get_seconds_monocoarse();
+    info->last_seen = mt_time_get_millis_monocoarse();
 
     prot_table_unlock(&db->data);
     return 0;

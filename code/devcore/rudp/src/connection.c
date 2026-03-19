@@ -5,6 +5,7 @@
 #include <asm-generic/errno.h>
 #include <packproto/protomsgs.h>
 #include <rudp/connection.h>
+#include <stdint.h>
 
 // -- creation
 
@@ -161,6 +162,12 @@ int rudp_conn_wait(rudp_connection *conn, int timeout){
     return r;
 }
 
+size_t rudp_conn_inflight(rudp_connection *conn){
+    if (!conn || conn->closed) return SIZE_MAX;
+
+    return prot_array_len(&conn->pkts_fhost);
+}
+
 // -- private
 
 int _rudp_conn_pass_net(rudp_connection *conn, protopack *pkt){
@@ -281,15 +288,6 @@ int _rudp_conn_timeouts(rudp_connection *conn, int64_t now_ms){
         return 0;
     }
 
-    // rudp_pending_pkt *first = _prot_array_at_unsafe(&conn->pkts_fhost, 0);
-    // int64_t base_rtt = conn->avg_rtt_ms < 50 ? 50 : conn->avg_rtt_ms;
-    // int64_t fast_backoff = base_rtt * (1.5 + (0.5 * first->retransmit_count));
-    
-    // if (now_ms - first->timestamp < fast_backoff) {
-    //     prot_array_unlock(&conn->pkts_fhost);
-    //     return 0; // Fast path
-    // }
-
     for (size_t i = 0; i < len; ){
         rudp_pending_pkt *pkt = _prot_array_at_unsafe(&conn->pkts_fhost, i);
         if (!pkt || !pkt->copy_pack) {
@@ -302,17 +300,18 @@ int _rudp_conn_timeouts(rudp_connection *conn, int64_t now_ms){
             fprintf(stderr, "[timeouts] got retransmission cap for %u seq\n", pkt->seq);
             if (pkt->copy_pack) free(pkt->copy_pack);
     
-            abort();
             rudp_pending_pkt *last_pkt = _prot_array_at_unsafe(&conn->pkts_fhost, len - 1);
             *pkt = *last_pkt;
             
             _prot_array_remove_unsafe(&conn->pkts_fhost, len - 1);
             len--;
             
-            continue;
+            conn->closed = true;
+            prot_array_unlock(&conn->pkts_fhost);
+            return -1;
         }
 
-        int64_t backoff_ms = conn->avg_rtt_ms * (1.5 + (2 << pkt->retransmit_count));
+        int64_t backoff_ms = conn->avg_rtt_ms * (1.5 + (pkt->retransmit_count));
         int64_t dt_ms = now_ms - pkt->timestamp;
 
         if (dt_ms >= backoff_ms) {

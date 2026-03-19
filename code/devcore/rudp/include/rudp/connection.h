@@ -74,6 +74,7 @@ int rudp_conn_send(rudp_connection *conn, protopack *pkt);
 int rudp_conn_recv(rudp_connection *conn, protopack **pkt);
 int rudp_conn_wait(rudp_connection *conn, int timeout);
 
+size_t rudp_conn_inflight(rudp_connection *conn);
 // -- private
 
 int _rudp_conn_pass_net  (rudp_connection *conn, protopack *pkt);
