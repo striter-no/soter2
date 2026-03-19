@@ -15,6 +15,7 @@ typedef enum: uint8_t {
     PACK_STATE,     // no RUDP
     PACK_RACK,      // RUDP ACK
     PACK_FIN,       // RUDP FIN
+    PACK_RELAYED,   // no RUDP (network layer, a.k.a UDP over P2P net)
     __PROTOPACK_END
 } protopack_type;
 

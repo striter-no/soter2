@@ -3,6 +3,7 @@
 #include <pthread.h>
 #include <stdint.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 int soter2_intr_init(
@@ -24,6 +25,10 @@ int soter2_intr_init(
     if (0 > gossip_system_init(&intr->gsyst, UID)) return -1;
 
     if (0 > state_sys_init(&intr->ssyst)) return -1;
+    if (0 > rele_dispatcher_new(&intr->rele_disp, &intr->sender, UID)) return -1;
+
+    if (0 > mt_evsock_new(&intr->state_ev)) return -1;
+    if (0 > prot_queue_create(sizeof(state_request), &intr->state_peers)) return -1;
 
     intr->ctx = (app_context){
         .g_syst   = &intr->gsyst,
@@ -80,12 +85,12 @@ int soter2_intr_upd_sign(soter2_interface *intr, const char *path){
 }
 
 void soter2_intr_reset_handlers(soter2_interface *intr, soter2_ivtable vt){
-    if(vt.ACK.foo) watcher_handler_reg(&intr->wtch, PACK_ACK, (watcher_handler){vt.ACK.foo, vt.ACK.ctx});
-    if(vt.PUNCH.foo) watcher_handler_reg(&intr->wtch, PACK_PUNCH, (watcher_handler){vt.PUNCH.foo, vt.PUNCH.ctx});
-    if(vt.PING.foo) watcher_handler_reg(&intr->wtch, PACK_PING, (watcher_handler){vt.PING.foo, vt.PING.ctx});
-    if(vt.PONG.foo) watcher_handler_reg(&intr->wtch, PACK_PONG, (watcher_handler){vt.PONG.foo, vt.PONG.ctx});
-    if(vt.GOSSIP.foo) watcher_handler_reg(&intr->wtch, PACK_GOSSIP, (watcher_handler){vt.GOSSIP.foo, vt.GOSSIP.ctx});
-    if(vt.STATE.foo) watcher_handler_reg(&intr->wtch, PACK_STATE, (watcher_handler){vt.STATE.foo, vt.STATE.ctx});
+    if(vt.ACK.foo)    watcher_handler_reg(&intr->wtch, PACK_ACK,    (watcher_handler){vt.ACK.foo,    vt.ACK.ctx    });
+    if(vt.PUNCH.foo)  watcher_handler_reg(&intr->wtch, PACK_PUNCH,  (watcher_handler){vt.PUNCH.foo,  vt.PUNCH.ctx  });
+    if(vt.PING.foo)   watcher_handler_reg(&intr->wtch, PACK_PING,   (watcher_handler){vt.PING.foo,   vt.PING.ctx   });
+    if(vt.PONG.foo)   watcher_handler_reg(&intr->wtch, PACK_PONG,   (watcher_handler){vt.PONG.foo,   vt.PONG.ctx   });
+    if(vt.GOSSIP.foo) watcher_handler_reg(&intr->wtch, PACK_GOSSIP, (watcher_handler){vt.GOSSIP.foo, vt.GOSSIP.ctx });
+    if(vt.STATE.foo)  watcher_handler_reg(&intr->wtch, PACK_STATE,  (watcher_handler){vt.STATE.foo,  vt.STATE.ctx  });
 }
 
 void soter2_intr_end(soter2_interface *intr){
@@ -248,9 +253,14 @@ float soter2_get_DPS(soter2_interface *intr){
 
 // -- workers
 
-static int ping_iter(const peer_info *info, void *ctx);
-static int gossip_iter(const peer_info *info, void *ctx);
-static int state_iter(soter2_interface *intr);
+// always listen to state server
+// and automaticly make new connections
+// static int state_loop ();
+
+static int ping_iter  (const peer_info *info, app_context *ctx);
+static int gossip_iter(const peer_info *info, app_context *ctx);
+static int relay_iter (const peer_info *info, protopack *unpacked, rele_dispatcher *disp);
+static int state_iter (soter2_interface *intr);
 
 static void *iter_daemon(void *_args){
     soter2_interface *intr = _args;
@@ -315,12 +325,53 @@ static void *iter_daemon(void *_args){
 
         listener_packet pkt;
         while (0 == pvd_next_packet(&intr->listener, &pkt)){
-            // printf("got packet %s...\n", PROTOPACK_TYPES_CHAR[pkt.pack->packtype]);
-            if (udp_is_RUDP_req(pkt.pack->packtype)){
-                rudp_dispatcher_pass(&intr->rudp_disp, pkt.pack);
+            
+            protopack_type ptype     = pkt.pack->packtype;
+            uint32_t       relay_to  = pkt.pack->h_to;
+            nnet_fd        relay_nfd = pkt.from_who; 
+
+            protopack *unpacked = NULL;
+            if (1 == rele_unpack(&intr->rele_disp, pkt.pack, &unpacked)){
+                unpacked = pkt.pack;
+            } else free(pkt.pack);
+
+            if (ptype == PACK_RELAYED){
+                
+                // relayed to us
+                if (relay_to == intr->rudp_disp.self_uid)
+                    goto pack_processing;
+
+                // otherwise relay forward
+
+                // firstly check, if I know this UID
+                peer_info addresant;
+                if (0 == peers_db_get(&intr->pdb, relay_to, &addresant)){
+                    rele_forward(&intr->rele_disp, unpacked, relay_to, &relay_nfd);
+                    free(unpacked);
+                    continue;
+                }
+
+                // if not, iterate by all peers database
+                peer_info *snapshot = NULL;
+                size_t snapshot_sz = peers_db_snapshot(&intr->pdb, &snapshot);
+                for (size_t i = 0; i < snapshot_sz; i++){
+                    peer_info info = snapshot[i];
+                    if (!relay_iter(&info, unpacked, &intr->rele_disp)) continue;
+
+                    peers_db_remove(&intr->pdb, info.UID);
+                }
+
+                free(snapshot);
+                free(unpacked);
+                continue;
+            }
+            
+pack_processing:
+            if (udp_is_RUDP_req(unpacked->packtype)){
+                rudp_dispatcher_pass(&intr->rudp_disp, unpacked);
                 intr->packets_translated++;
             } else {
-                watcher_pass(&intr->wtch, pkt.pack, &pkt.from_who);
+                watcher_pass(&intr->wtch, unpacked, &pkt.from_who);
             }
         }
     }
@@ -330,8 +381,6 @@ static void *iter_daemon(void *_args){
 
 static int state_iter(soter2_interface *intr){
     // requesting to server
-    
-    // printf("requesting state...\n");
     state_request r = state_rcreate(
         ln_to_uint32(&intr->sock.addr), 
         intr->sock.addr.ip.v4.port,
@@ -348,7 +397,7 @@ static int state_iter(soter2_interface *intr){
     return 0;
 }
 
-static int ping_iter(const peer_info *info, void *ctx_){ app_context *ctx = ctx_;
+static int ping_iter(const peer_info *info, app_context *ctx){
     if (ctx->now_ms - info->last_seen >= SOTER_DEAD_DT * 1000){
         printf("Dead peer detected: %u\n", info->UID);
         return 1;
@@ -363,7 +412,7 @@ static int ping_iter(const peer_info *info, void *ctx_){ app_context *ctx = ctx_
     return 0;
 }
 
-static int gossip_iter(const peer_info *info, void *ctx_){ app_context *ctx = ctx_;
+static int gossip_iter(const peer_info *info, app_context *ctx){
     // we dont check dt because of 1 check in iter() daemon
     // do not spam to all peers
     if (rand() % 2 == 0) return 0;
@@ -397,4 +446,13 @@ static int gossip_iter(const peer_info *info, void *ctx_){ app_context *ctx = ct
     pvd_sender_send(ctx->sender, gossip, &info->nfd);
     free(gossip);
     return 0;
+}
+
+
+static int relay_iter(
+    const peer_info *info, 
+    protopack       *unpacked, 
+    rele_dispatcher *disp
+){
+    return rele_forward(disp, unpacked, info->UID, &info->nfd);
 }

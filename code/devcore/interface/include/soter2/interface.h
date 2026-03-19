@@ -27,10 +27,13 @@ typedef struct {
     sign       self_sign;
 
     state_system ssyst;
+    prot_queue   state_peers;
+    mt_eventsock state_ev;
 
     ln_usocket sock;
     nat_type   NAT;
 
+    rele_dispatcher rele_disp;
     rudp_dispatcher rudp_disp;
     peers_db        pdb;
     gossip_system   gsyst;

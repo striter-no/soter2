@@ -24,3 +24,19 @@ protopack *proto_msg_quick(
         NULL, 0
     );
 }
+
+protopack *proto_msg_relay(
+    protopack *og_packet,
+    uint32_t   from_relay_to,
+    uint32_t   relay_uid
+){
+    if (!og_packet) return NULL;
+
+    return udp_make_pack(
+        0, 
+        relay_uid, from_relay_to, 
+        PACK_RELAYED, 
+        og_packet, 
+        sizeof(protopack) + og_packet->d_size
+    );
+}

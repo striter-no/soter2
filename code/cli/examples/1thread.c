@@ -2,6 +2,8 @@
 #include <errno.h>
 #include <unistd.h>
 
+
+static void raw_transport(soter2_interface *intr, rudp_connection *conn);
 static void e2ee_transport(soter2_interface *intr, e2ee_connection *conn);
 int main(){
     srand(mt_time_get_seconds_monocoarse());
@@ -53,6 +55,39 @@ int main(){
     free(conn);
 
     soter2_intr_end(&intr);
+}
+
+static void raw_transport(soter2_interface *intr, rudp_connection *conn){
+    int i = 0;
+    while (!conn->closed){
+        char data[200]; snprintf(data, 50, "Hello %d", i);
+
+        prot_array_lock(&conn->pkts_fhost);
+        int in_flight = conn->pkts_fhost.array.len;
+        prot_array_unlock(&conn->pkts_fhost);
+
+        if (in_flight < 16) {
+            soter2_isend(conn, data, strlen(data));
+        }
+        
+        int w = rudp_conn_wait(conn, conn->ack_timeout_ms);
+        if (w == 0) {
+            usleep(10000);
+            continue;
+        } else if (w < 0) {
+            if (errno == EAGAIN || errno == EINTR) continue;
+            perror("[main][loop] iwait");
+            break;
+        }
+
+        protopack *r;
+        while ((r = soter2_irecv(conn)) != NULL) {
+            if (i % 100 == 0)
+                printf("> %.*s  (gseq: %u, dps: %f)\n", r->d_size, r->data, r->seq, soter2_get_DPS(intr));
+            free(r);
+            i++;
+        }
+    }
 }
 
 static void e2ee_transport(soter2_interface *intr, e2ee_connection *conn){
