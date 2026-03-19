@@ -34,9 +34,9 @@ make && make install // automaticly moves abs to ~/.local/bin/abs
 
 ```sh
 cd code/stating
-abs // to rebuilt, if neccarry
+abs # to rebuilt, if neccarry
 
-// listen on all interfaces, on port 9000
+# listen on all interfaces, on port 9000
 ./bin/server 0.0.0.0 9000
 ```
 
@@ -46,7 +46,7 @@ abs // to rebuilt, if neccarry
 cd code/cli
 abs
 
-// automaticly connects to 127.0.0.1:9000 stating server
+# automaticly connects to 127.0.0.1:9000 stating server
 ./bin/soter
 ```
 
