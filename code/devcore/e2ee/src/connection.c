@@ -86,9 +86,10 @@ int e2ee_send(e2ee_connection *conn, void *data, size_t d_size){
         ciphered,
         d_size + crypto_aead_chacha20poly1305_IETF_ABYTES
     );
+    prot_array_unlock(&conn->conn->pkts_fhost);
 
     int r = rudp_conn_send(conn->conn, copy);
-    prot_array_unlock(&conn->conn->pkts_fhost);
+    // prot_array_unlock(&conn->conn->pkts_fhost);
 
     free(ciphered);
     free(copy);
@@ -104,8 +105,8 @@ protopack *e2ee_recv(e2ee_connection *conn){
 
     protopack *r = NULL;
     if (0 > rudp_conn_recv(conn->conn, &r)){
-        fprintf(stderr, "[e2ee][recv] failed to recv raw bytes");
-        return NULL;
+        // fprintf(stderr, "[e2ee][recv] failed to recv raw bytes\n");
+        return NULL; // forward message
     }
 
     if (r->d_size < crypto_aead_chacha20poly1305_IETF_ABYTES){

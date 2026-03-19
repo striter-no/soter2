@@ -47,7 +47,7 @@ int main(){
 
     printf("[main] e2ee hs done\n");
     for (int i = 0; i < 500;){
-        if (conn->closed) break;
+        if (econn.conn->closed) break;
         
         char data[200]; snprintf(data, 50, "Hello %d", i);
 
@@ -56,10 +56,10 @@ int main(){
         prot_array_unlock(&conn->pkts_fhost);
 
         if (in_flight < 16) {
-            soter2_isend(conn, data, strlen(data));
+            e2ee_send(&econn, data, strlen(data));
         } else usleep(10000);
 
-        int w = rudp_conn_wait(conn, conn->ack_timeout_ms);
+        int w = e2ee_wait(&econn, econn.conn->ack_timeout_ms);
         if (w == 0) {
             printf("[main][loop] skiped %d iter\n", i);
             usleep(10000);
@@ -71,7 +71,7 @@ int main(){
         }
 
         protopack *r;
-        while ((r = soter2_irecv(conn)) != NULL) {
+        while ((r = e2ee_recv(&econn)) != NULL) {
             printf("> %.*s  (gseq: %u)\n", r->d_size, r->data, r->seq);
             free(r);
             i++;
