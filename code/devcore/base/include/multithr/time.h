@@ -1,5 +1,4 @@
 #define _POSIX_C_SOURCE 200809L
-#include <bits/time.h>
 #include <netinet/in.h>
 #include <stdint.h>
 #include <time.h>
