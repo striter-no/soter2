@@ -282,7 +282,7 @@ static void _rudp_dispatcher_net_handler(rudp_dispatcher *disp, rudp_connection 
                     free(msg);
                     
                     uint32_t packets_count = conn->packets_since_ack;
-                    conn->last_ack_sent_seq = conn->last_recved_seq; // Обновляем на отправленный seq
+                    conn->last_ack_sent_seq = conn->last_recved_seq;
                     conn->packets_since_ack = 0;
                     conn->last_ack_timestamp = now_ms;
 
