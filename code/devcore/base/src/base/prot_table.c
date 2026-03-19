@@ -6,7 +6,8 @@ int prot_table_create(size_t key_size, size_t val_size, dyn_own_t flags, prot_ta
     
     pthread_mutexattr_t attrs;
     pthread_mutexattr_init(&attrs);
-    pthread_mutexattr_settype(&attrs, PTHREAD_MUTEX_RECURSIVE);
+    // pthread_mutexattr_settype(&attrs, PTHREAD_MUTEX_RECURSIVE);
+    pthread_mutexattr_settype(&attrs, PTHREAD_MUTEX_NORMAL);
     pthread_mutex_init(&table->mtx, &attrs);
     pthread_mutexattr_destroy(&attrs);
 

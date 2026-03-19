@@ -15,5 +15,10 @@ int prot_table_set(prot_table *table, const void *key, const void *val);
 void* prot_table_get(prot_table *table, const void *key);
 int prot_table_remove(prot_table *table, const void *key);
 void prot_table_end(prot_table *table);
+
+static inline void* _prot_table_get_unsafe(prot_table *table, const void *key){
+    return dyn_table_get(&table->table, key);
+}
+
 #endif
 #define PROT_BASE_TABLE

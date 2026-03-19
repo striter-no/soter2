@@ -26,17 +26,17 @@ int gossip_system_end(gossip_system *g){
 int gossip_cleanup(gossip_system *g){
     if (!g) return -1;
 
-    uint32_t curr_timestamp = mt_time_get_seconds();
+    int64_t curr_timestamp = mt_time_get_seconds();
     prot_array_lock(&g->gossips);
     for (size_t i = 0; i < g->gossips.array.len;){
-        gossip_entry *entr = *(gossip_entry**)prot_array_at(&g->gossips, i);
+        gossip_entry *entr = *(gossip_entry**)_prot_array_at_unsafe(&g->gossips, i);
         if ((curr_timestamp - entr->timestamp) < GOSSIP_DEAD_DT) {
             i++;
             continue;
         }
 
         free(entr);
-        prot_array_remove(&g->gossips, i);
+        _prot_array_remove_unsafe(&g->gossips, i);
     }
     prot_array_unlock(&g->gossips);
 
@@ -53,7 +53,7 @@ int gossip_new_entry(gossip_system *g, gossip_entry *entry){
     gossip_entry *existing = NULL;
     size_t        existing_inx = 0;
     for (size_t i = 0; i < g->gossips.array.len; i++) {
-        gossip_entry *tmp = *(gossip_entry**)prot_array_at(&g->gossips, i);
+        gossip_entry *tmp = *(gossip_entry**)_prot_array_at_unsafe(&g->gossips, i);
         if (tmp->uid == entry->uid) {
             existing = tmp;
             existing_inx = i;
@@ -68,13 +68,13 @@ int gossip_new_entry(gossip_system *g, gossip_entry *entry){
         }
         
         free(existing);
-        prot_array_remove(&g->gossips, existing_inx);
+        _prot_array_remove_unsafe(&g->gossips, existing_inx);
     }
 
     gossip_entry *copy;
     gossip_entry_copy(&copy, entry);
 
-    prot_array_push(&g->gossips, &copy);
+    _prot_array_push_unsafe(&g->gossips, &copy);
     prot_array_unlock(&g->gossips);
 
     return 0;
@@ -110,7 +110,7 @@ int gossip_random_entries(gossip_system *g, gossip_entry ***entries, size_t *n_p
     
     *entries = malloc(sizeof(gossip_entry*) * n);
     for (size_t i = 0; i < n; i++) {
-        gossip_entry *entr = *(gossip_entry**)prot_array_at(&g->gossips, indices[i]);
+        gossip_entry *entr = *(gossip_entry**)_prot_array_at_unsafe(&g->gossips, indices[i]);
         gossip_entry_copy(&((*entries)[i]), entr);
     }
     

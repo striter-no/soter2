@@ -1,5 +1,4 @@
 #include <providers/listener.h>
-#include <time.h>
 
 int pvd_listener_new(pvd_listener *l, ln_usocket *p_usocket){
     if (!l || !p_usocket) return -1;
@@ -42,16 +41,14 @@ int pvd_listener_start(pvd_listener *l){
     return 0;
 }
 
-listener_packet pvd_next_packet(pvd_listener *l){
-    if (!l) return (listener_packet){0};
+int pvd_next_packet(pvd_listener *l, listener_packet *pkt){
+    if (!l) return -1;
 
-    listener_packet pack;
-    if (0 > prot_queue_pop(&l->packets, &pack)) {
-        fprintf(stderr, "nothing left in listener\n");
-        return (listener_packet){0};
+    if (0 > prot_queue_pop(&l->packets, pkt)) {
+        return -1;
     }
 
-    return pack;
+    return 0;
 }
 
 // worker
@@ -61,7 +58,7 @@ static void *pvd_listener_worker(void *_args){
     nnet_fd from = {0};
     char    buf[2048] = {0};
     while (atomic_load(&listener->is_running)){
-        int r = ln_wait_netfd(&listener->p_usocket->fd, POLLIN, 100);
+        int r = ln_wait_netfd(&listener->p_usocket->fd, POLLIN, 3000);
         if (r == 0) {continue;}
         if (r < 0)  {perror("poll()"); continue;}
 
@@ -82,6 +79,7 @@ static void *pvd_listener_worker(void *_args){
         }
         
         listener_packet lpkt = {pkt, from};
+        // proto_print(pkt, 1);
         // printf("[pvd][listener] got new packet from %s:%u (%zu bytes): PKTTYPE: %d\n", addr.ip.v4.ip, addr.ip.v4.port, recved, pkt->packtype);
         prot_queue_push(&listener->packets, &lpkt);
         mt_evsock_notify(&listener->newpack_es);

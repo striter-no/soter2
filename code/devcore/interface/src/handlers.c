@@ -101,6 +101,7 @@ int soter2_hnd_STATE (protopack *pck, nnet_fd *nfd, pvd_sender *s, void *_ctx){
     (void)nfd;
     (void)s;
 
+    // printf("got STATE packet...\n");
     if (pck->d_size != sizeof(state_request)){
         fprintf(stderr, "[hnd][state] bad packet size: %u\n", pck->d_size);
         return -1;
@@ -108,6 +109,11 @@ int soter2_hnd_STATE (protopack *pck, nnet_fd *nfd, pvd_sender *s, void *_ctx){
 
     state_request req;
     if (0 > state_rreceive(pck->data, &req)){
+        return -1;
+    }
+
+    if (req.uid == ctx->rudp->self_uid){
+        fprintf(stderr, "[hnd][state] rejecting self-peer\n");
         return -1;
     }
 

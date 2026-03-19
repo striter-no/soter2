@@ -29,9 +29,11 @@ int state_sys_new_ans(state_system *sys, state_request *req){
 
 int state_sys_wait(state_system *sys, state_request *out, int timeout){
     if (!sys || !out) return -1;
-    if (0 == mt_evsock_wait(&sys->new_state_fd, timeout)) 
+    if (0 == mt_evsock_wait(&sys->new_state_fd, timeout)){ 
         return 0;
+    }
 
+    mt_evsock_drain(&sys->new_state_fd);
     prot_queue_pop(&sys->new_state_ans, out);
     return 1;
 }
@@ -51,7 +53,7 @@ state_request state_rcreate(
     req.uid   = htonl(uid);
     req.nonce = htonl(randombytes_random());
     req.type  = (uint8_t)(type);
-    req.timestamp = htonl(mt_time_get_seconds());
+    req.timestamp = htonll(mt_time_get_seconds());
     memcpy(req.pubkey, s.id_pub, CRYPTO_PUBKEY_BYTES);
 
     uint8_t sign_buff[128] = {0};
@@ -96,7 +98,7 @@ int state_rreceive(
     req.port  = ntohs(req.port);
     req.uid   = ntohl(req.uid);
     req.nonce = ntohl(req.nonce);
-    req.timestamp = ntohl(req.timestamp);
+    req.timestamp = ntohll(req.timestamp);
 
     if (!crypto_pubkey_and_uid_check(req.pubkey, req.uid)){
         fprintf(stderr, "[state_rr] pubkey & uid missmatch\n");
@@ -113,7 +115,7 @@ state_request state_retranslate(state_request req){
     o.port  = htons(req.port);
     o.uid   = htonl(req.uid);
     o.nonce = htonl(req.nonce);
-    o.timestamp = htonl(req.timestamp);
+    o.timestamp = htonll(req.timestamp);
     o.type = req.type;
     memcpy(o.pubkey, req.pubkey, CRYPTO_PUBKEY_BYTES);
     memcpy(o.signature, req.signature, CRYPTO_SIGN_BYTES);

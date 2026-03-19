@@ -4,8 +4,9 @@
 #ifndef MULTITHR_EVENTS_H
 
 typedef struct {
-    int parent_fd;
-    int client_fd;
+    int _write_fd;
+    int event_fd;
+
     struct pollfd pfd;
 } mt_eventsock;
 

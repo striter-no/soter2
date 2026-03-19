@@ -41,7 +41,7 @@ int peers_db_remove(peers_db *db, uint32_t UID){
 int peers_db_get(peers_db *db, uint32_t UID, peer_info *info){
     if (!db) return -1;
     prot_table_lock(&db->data);
-    peer_info *info_ = prot_table_get(&db->data, &UID);
+    peer_info *info_ = _prot_table_get_unsafe(&db->data, &UID);
     if (!info_) {
         prot_table_unlock(&db->data);
         return -1;
@@ -70,7 +70,7 @@ int peers_db_schange(peers_db *db, uint32_t UID, peer_state new_state){
     if (!db) return -1;
     prot_table_lock(&db->data);
     
-    peer_info *info = prot_table_get(&db->data, &UID);
+    peer_info *info = _prot_table_get_unsafe(&db->data, &UID);
     if (!info) {
         prot_table_unlock(&db->data);
         return -1;
@@ -86,7 +86,7 @@ int peers_db_unfd(peers_db *db, uint32_t UID, nnet_fd *nfd){
     if (!db) return -1;
     prot_table_lock(&db->data);
     
-    peer_info *info = prot_table_get(&db->data, &UID);
+    peer_info *info = _prot_table_get_unsafe(&db->data, &UID);
     if (!info) {
         prot_table_unlock(&db->data);
         // fprintf(stderr, "[peersdb][unfd]: failed to get info\n");
@@ -103,15 +103,16 @@ int peers_db_unfd(peers_db *db, uint32_t UID, nnet_fd *nfd){
 
 int peers_db_utime(peers_db *db, uint32_t UID){
     if (!db) return -1;
+    prot_table_lock(&db->data);
     
-    peer_info *info = prot_table_get(&db->data, &UID);
+    peer_info *info = _prot_table_get_unsafe(&db->data, &UID);
     if (!info) {
         prot_table_unlock(&db->data);
         // fprintf(stderr, "[peersdb][utime]: failed to get info\n");
         return -1;
     }
 
-    info->last_seen = mt_time_get_seconds();
+    info->last_seen = mt_time_get_seconds_monocoarse();
 
     return 0;
 }
@@ -240,7 +241,7 @@ void peers_db_foreach(peers_db *db, peer_iter_fn func, void *ctx) {
     prot_table_lock(&db->data);
     for (size_t i = 0; i < db->data.table.array.len;) {
         dyn_pair *pair = dyn_array_at(&db->data.table.array, i);
-        
+    
         if (!pair) {
             i++; 
             continue; 

@@ -22,6 +22,7 @@ extern const char *PROTOPACK_TYPES_CHAR[];
 
 #define PACKET_TYPE_MAX ((size_t)__PROTOPACK_END)
 
+uint32_t crc32(const void *data, size_t n_bytes);
 bool udp_is_RUDP_req(protopack_type type);
 
 typedef struct __attribute__((packed)) {
@@ -46,6 +47,9 @@ protopack *udp_make_pack(
 
 protopack *udp_copy_pack(protopack *pk); // bool apply_ntoh
 protopack *retranslate_udp(protopack *pk);
+
+// dir = from sender (0) from listener (1)
+void proto_print(const protopack *pack, int dir);
 
 ssize_t protopack_send(
     const protopack *pack,

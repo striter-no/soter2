@@ -3,7 +3,6 @@
 #include <pthread.h>
 #include <stdint.h>
 #include <sys/stat.h>
-#include <time.h>
 
 int soter2_intr_init(
     soter2_interface *intr
@@ -153,7 +152,7 @@ int soter2_e2ee_wrap(soter2_interface *intr, rudp_connection *conn, e2ee_connect
 
 void soter2_iconnect(soter2_interface *intr, naddr_t address, uint32_t UID){
     peers_db_add(&intr->pdb, (peer_info){
-        .last_seen = mt_time_get_seconds(),
+        .last_seen = mt_time_get_seconds_monocoarse(),
         .UID = UID,
         .state = PEER_ST_INITED,
         .nfd = ln_netfdq(&address),
@@ -236,39 +235,39 @@ static void *iter_daemon(void *_args){
     soter2_interface *intr = _args;
      
     while (atomic_load(&intr->is_running)){
-        int r = mt_evsock_wait(&intr->listener.newpack_es, 10);
+        int r = mt_evsock_wait(&intr->listener.newpack_es, 3 * 1000);
         mt_evsock_drain(&intr->listener.newpack_es);
         
-        int64_t millis = mt_time_get_millis();
-        if (millis - intr->packets_timestamp >= 1000) {
-            int64_t delta_ms = millis - intr->packets_timestamp;
+        // int64_t millis = mt_time_get_millis_monocoarse();
+        // if (millis - intr->packets_timestamp >= 1000) {
+        //     int64_t delta_ms = millis - intr->packets_timestamp;
             
-            pthread_mutex_lock(&intr->rate_mtx);
-            if (delta_ms > 0) {
-                float delta_sec = delta_ms / 1000.0f;
+        //     pthread_mutex_lock(&intr->rate_mtx);
+        //     if (delta_ms > 0) {
+        //         float delta_sec = delta_ms / 1000.0f;
                 
-                intr->packet_rate = (float)intr->packets_translated / delta_sec;
-            } else {
-                intr->packet_rate = 0.0f;
-            }
-            pthread_mutex_unlock(&intr->rate_mtx);
+        //         intr->packet_rate = (float)intr->packets_translated / delta_sec;
+        //     } else {
+        //         intr->packet_rate = 0.0f;
+        //     }
+        //     pthread_mutex_unlock(&intr->rate_mtx);
             
-            intr->packets_timestamp = millis;
-            intr->packets_translated = 0;
-        }
+        //     intr->packets_timestamp = millis;
+        //     intr->packets_translated = 0;
+        // }
 
-        if (intr->state_req_dt != 0 && (mt_time_get_seconds() - intr->state_last_called >= intr->state_req_dt)){
+        if (intr->state_req_dt != 0 && (mt_time_get_seconds_monocoarse() - intr->state_last_called >= intr->state_req_dt)){
             state_iter(intr);
-            intr->state_last_called = mt_time_get_seconds();
+            intr->state_last_called = mt_time_get_seconds_monocoarse();
         }
 
         // if (intr->packet_rate <= SOTER_LOW_PACKET_RATE)
         // peers_db_foreach(&intr->pdb, ping_iter, &intr->ctx);
-        // if (mt_time_get_seconds() - intr->gsyst.last_gossiped >= SOTER_GOSSIP_DT){
+        // if (mt_time_get_seconds_monocoarse() - intr->gsyst.last_gossiped >= SOTER_GOSSIP_DT){
         //     gossip_cleanup(&intr->gsyst);
 
         //     peers_db_foreach(&intr->pdb, gossip_iter, &intr->ctx);
-        //     intr->gsyst.last_gossiped = mt_time_get_seconds();
+        //     intr->gsyst.last_gossiped = mt_time_get_seconds_monocoarse();
         // }
 
         if (r == 0) continue;
@@ -277,14 +276,15 @@ static void *iter_daemon(void *_args){
             continue;
         }
 
-        listener_packet pkt = pvd_next_packet(&intr->listener);
-        if (pkt.pack == 0 || pkt.from_who.addr_len == 0) continue;
-
-        if (udp_is_RUDP_req(pkt.pack->packtype)){
-            rudp_dispatcher_pass(&intr->rudp_disp, pkt.pack);
-            intr->packets_translated++;
-        } else {
-            watcher_pass(&intr->wtch, pkt.pack, &pkt.from_who);
+        listener_packet pkt;
+        while (0 == pvd_next_packet(&intr->listener, &pkt)){
+            // printf("got packet %s...\n", PROTOPACK_TYPES_CHAR[pkt.pack->packtype]);
+            if (udp_is_RUDP_req(pkt.pack->packtype)){
+                rudp_dispatcher_pass(&intr->rudp_disp, pkt.pack);
+                // intr->packets_translated++;
+            } else {
+                watcher_pass(&intr->wtch, pkt.pack, &pkt.from_who);
+            }
         }
     }
 
@@ -293,7 +293,8 @@ static void *iter_daemon(void *_args){
 
 static int state_iter(soter2_interface *intr){
     // requesting to server
-
+    
+    // printf("requesting state...\n");
     state_request r = state_rcreate(
         ln_to_uint32(&intr->sock.addr), 
         intr->sock.addr.ip.v4.port,
@@ -311,7 +312,7 @@ static int state_iter(soter2_interface *intr){
 }
 
 static int ping_iter(peer_info *info, void *ctx_){ app_context *ctx = ctx_;
-    uint32_t stamp = mt_time_get_seconds();
+    uint32_t stamp = mt_time_get_seconds_monocoarse();
     // printf("for %u last_seen DT: %u\n", info->UID, stamp - info->last_seen);
     if (stamp - info->last_seen >= SOTER_DEAD_DT){
         printf("Dead peer detected: %u\n", info->UID);

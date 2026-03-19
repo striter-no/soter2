@@ -79,7 +79,7 @@ static void *watcher_worker(void *_args){
     watcher *w = _args;
 
     while (atomic_load(&w->is_running)){
-        int r = mt_evsock_wait(&w->newpack, 100);
+        int r = mt_evsock_wait(&w->newpack, 1000);
         if (r == 0) continue;
         if (r < 0) {
             perror("poll()");

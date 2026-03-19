@@ -23,7 +23,7 @@ typedef struct __attribute__((packed)) {
 
     state_rtype type;
     uint32_t    nonce;
-    uint32_t    timestamp;
+    int64_t     timestamp;
 } state_request;
 
 typedef struct {

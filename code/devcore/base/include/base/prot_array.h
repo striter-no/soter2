@@ -27,5 +27,18 @@ void prot_array_setself(prot_array *array);
 void prot_array_sort(prot_array *array, dyn_array_cmp_t cmp);
 void prot_array_end(prot_array *array);
 
+static inline size_t _prot_array_len_unsafe(prot_array *array) {
+    return array->array.len;
+}
+static inline void* _prot_array_at_unsafe(prot_array *array, size_t index) {
+    return dyn_array_at(&array->array, index);
+}
+static inline int _prot_array_remove_unsafe(prot_array *array, size_t index) {
+    return dyn_array_remove(&array->array, index);
+}
+static inline int _prot_array_push_unsafe(prot_array *array, const void *element){
+    return dyn_array_push(&array->array, element);
+}
+
 #endif
 #define BASE_PROT_ARRAY

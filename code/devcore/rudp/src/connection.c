@@ -42,13 +42,22 @@ int rudp_conn_new(
     conn->nfd   = nfd;
 
     conn->last_recved_ack = UINT32_MAX;
-    conn->last_sended_ack = UINT32_MAX;
     conn->last_recved_seq = UINT32_MAX;
+    conn->last_sended_ack = UINT32_MAX;
+
+    conn->last_ack_sent_seq = UINT32_MAX;
+    
+    conn->ack_threshold = 2;
+    conn->ack_timeout_ms = 2000;
+    conn->avg_rtt_ms = 20;
+    conn->packets_since_ack = 0;
+    conn->last_ack_timestamp = mt_time_get_millis_monocoarse();
 
     conn->current_seq = 0;
     conn->sender = sender;
     conn->closed = false;
 
+    conn->oldest_timestamp = INT64_MAX;
     return 0;
 }
 
@@ -101,7 +110,8 @@ int rudp_conn_send(rudp_connection *conn, protopack *pkt){
 
     prot_array_lock(&conn->pkts_fhost);
 
-    if (conn->pkts_fhost.array.len >= RUDP_REORDER_WINDOW) { 
+    // printf("[conn->pkts_fhost]: %zu\n", conn->pkts_fhost.array.len);
+    if (conn->pkts_fhost.array.len >= RUDP_SEND_WINDOW) { 
         prot_array_unlock(&conn->pkts_fhost);
         return EAGAIN;
     }
@@ -118,8 +128,9 @@ int rudp_conn_send(rudp_connection *conn, protopack *pkt){
 
     pvd_sender_send(conn->sender, pack_copy, &conn->nfd);
     pending.state = RUDP_STATE_SENT;
+    pending.send_timestamp = mt_time_get_millis_monocoarse(); 
 
-    if (0 > prot_array_push(&conn->pkts_fhost, &pending)){
+    if (0 > _prot_array_push_unsafe(&conn->pkts_fhost, &pending)){
         prot_array_unlock(&conn->pkts_fhost);
         free(pack_copy);
         return -1;
@@ -184,7 +195,7 @@ int _rudp_conn_reordering(rudp_connection *conn){ // done
     prot_queue_lock(&conn->pkts_net);
 
     protopack *pkt;
-    while (0 == prot_queue_pop(&conn->pkts_net, &pkt)){
+    while (0 == _prot_queue_pop_unsafe(&conn->pkts_net, &pkt)){
         // printf("[_reord] pop called\n");
         if (!pkt) {
             // printf("[_reord] null pkt\n");
@@ -207,7 +218,7 @@ int _rudp_conn_reordering(rudp_connection *conn){ // done
         size_t len = conn->pkts_reorder_buf.array.len;
 
         for (pos = 0; pos < len; pos++) {
-            protopack **existing = dyn_array_at(&conn->pkts_reorder_buf.array, pos);
+            protopack **existing = _prot_array_at_unsafe(&conn->pkts_reorder_buf, pos);
             if ((*existing)->seq == pkt->seq) {
                 duplicate = true; 
                 break;
@@ -252,46 +263,58 @@ int _rudp_conn_reordering(rudp_connection *conn){ // done
     return 0;
 }
 
-int _rudp_conn_timeouts(rudp_connection *conn){ // done
+int _rudp_conn_timeouts(rudp_connection *conn, int64_t now_ms){
     if (!conn) return -1;
 
-    // locking full array
-    prot_array_lock(&conn->pkts_fhost);
-    int64_t now_ms = mt_time_get_millis();
+    prot_array_lock(&conn->pkts_fhost); 
 
-    for (size_t i = 0; i < prot_array_len(&conn->pkts_fhost); ){
-        rudp_pending_pkt *pkt = prot_array_at(&conn->pkts_fhost, i);
-        
-        // removing dead packets if any
-        if (!pkt || !(pkt->copy_pack)) {
-            prot_array_remove(&conn->pkts_fhost, i);
+    size_t len = _prot_array_len_unsafe(&conn->pkts_fhost);
+    if (len == 0) {
+        prot_array_unlock(&conn->pkts_fhost);
+        return 0;
+    }
+
+    // rudp_pending_pkt *first = _prot_array_at_unsafe(&conn->pkts_fhost, 0);
+    // int64_t base_rtt = conn->avg_rtt_ms < 50 ? 50 : conn->avg_rtt_ms;
+    // int64_t fast_backoff = base_rtt * (1.5 + (0.5 * first->retransmit_count));
+    
+    // if (now_ms - first->timestamp < fast_backoff) {
+    //     prot_array_unlock(&conn->pkts_fhost);
+    //     return 0; // Fast path
+    // }
+
+    for (size_t i = 0; i < len; ){
+        rudp_pending_pkt *pkt = _prot_array_at_unsafe(&conn->pkts_fhost, i);
+        if (!pkt || !pkt->copy_pack) {
+            _prot_array_remove_unsafe(&conn->pkts_fhost, i);
+            len--;
             continue;
         }
 
-        // removing lost packets
         if (pkt->retransmit_count >= RUDP_RETRANSMISSION_CAP){
-            if (pkt->copy_pack) 
-                free(pkt->copy_pack);
-
-            prot_array_remove(&conn->pkts_fhost, i);
+            fprintf(stderr, "[timeouts] got retransmission cap for %u seq\n", pkt->seq);
+            if (pkt->copy_pack) free(pkt->copy_pack);
+    
+            abort();
+            rudp_pending_pkt *last_pkt = _prot_array_at_unsafe(&conn->pkts_fhost, len - 1);
+            *pkt = *last_pkt;
+            
+            _prot_array_remove_unsafe(&conn->pkts_fhost, len - 1);
+            len--;
+            
             continue;
         }
 
-        int64_t backoff_ms = (int64_t)RUDP_TIMEOUT * (1ULL << pkt->retransmit_count);
+        int64_t backoff_ms = conn->avg_rtt_ms * (1.5 + (0.5 * pkt->retransmit_count));
         int64_t dt_ms = now_ms - pkt->timestamp;
 
-        if (dt_ms < backoff_ms) goto skip;
-
-        // perform retransmission
-        pvd_sender_send(conn->sender, pkt->copy_pack, &conn->nfd);
-        pkt->timestamp = now_ms;
-        pkt->retransmit_count++;
-
-skip:
+        if (dt_ms >= backoff_ms) {
+            pvd_sender_send(conn->sender, pkt->copy_pack, &conn->nfd);
+            pkt->timestamp = now_ms;
+            pkt->retransmit_count++;
+        }
         i++;
     }
-    
     prot_array_unlock(&conn->pkts_fhost);
-
     return 0;
 }

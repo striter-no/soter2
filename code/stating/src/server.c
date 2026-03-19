@@ -95,26 +95,26 @@ int main(int argc, char *argv[]){
             printf("looping...\n");
             state_request r = sr.r;
 
-            server_request *peer = prot_queue_peek(&server.pending_peers);
+            server_request peer;
             
-            if (peer) {
-                if (r.uid == peer->r.uid){
+            if (prot_queue_peek(&server.pending_peers, &peer) == 0) {
+                if (r.uid == peer.r.uid){
                     printf("[main][loop] ignoring identical UIDs\n");
                     continue;
                 }
                 
-                state_request to_new = state_retranslate(peer->r);
+                state_request to_new = state_retranslate(peer.r);
 
                 protopack *pack_to_new = udp_make_pack(0, 0, r.uid, PACK_STATE, &to_new, sizeof(to_new));
                 pvd_sender_send(&server.intr->sender, pack_to_new, &sr.nfd);
                 free(pack_to_new);
 
                 state_request to_old = state_retranslate(r);
-                protopack *pack_to_peer = udp_make_pack(0, 0, peer->r.uid, PACK_STATE, &to_old, sizeof(to_old));
-                pvd_sender_send(&server.intr->sender, pack_to_peer, &peer->nfd);
+                protopack *pack_to_peer = udp_make_pack(0, 0, peer.r.uid, PACK_STATE, &to_old, sizeof(to_old));
+                pvd_sender_send(&server.intr->sender, pack_to_peer, &peer.nfd);
                 free(pack_to_peer);
 
-                printf("[pair] connected uid:%u <-> uid:%u\n", peer->r.uid, r.uid);
+                printf("[pair] connected uid:%u <-> uid:%u\n", peer.r.uid, r.uid);
                 
                 prot_queue_pop(&server.pending_peers, NULL);
             } else {

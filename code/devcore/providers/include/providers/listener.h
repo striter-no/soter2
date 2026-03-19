@@ -26,7 +26,7 @@ int pvd_listener_new(pvd_listener *l, ln_usocket *p_usocket);
 void pvd_listener_end(pvd_listener *l);
 
 int pvd_listener_start(pvd_listener *l);
-listener_packet pvd_next_packet(pvd_listener *l);
+int pvd_next_packet(pvd_listener *l, listener_packet *pkt);
 
 #endif
 #define PROVIDER_LISTENER

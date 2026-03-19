@@ -30,6 +30,19 @@ int dyn_array_push(dyn_array *array, const void *element){
     return 0;
 }
 
+int dyn_array_resize(dyn_array *array, size_t s){
+    if (!array || s == SIZE_MAX) return -1;
+
+    if (s >= (array->head - 1)){
+        void *n = realloc(array->elements, array->head * 2 * array->element_size);
+        if (!n) return -1;
+        array->elements = n;
+        array->head *= 2;
+    }
+
+    return 0;
+}
+
 size_t dyn_array_index(dyn_array *array, const void *element){
     if (!array) return SIZE_MAX;
     for (size_t i = 0; i < array->len; i++){

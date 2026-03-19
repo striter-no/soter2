@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 200809L
 #include <logging/logging.h>
 #include <stdio.h>
 #include <stdarg.h>

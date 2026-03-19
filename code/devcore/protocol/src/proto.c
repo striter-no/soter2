@@ -14,7 +14,7 @@ const char *PROTOPACK_TYPES_CHAR[] = {
     "PACK_RACK"
 };
 
-static uint32_t crc32(const void *data, size_t n_bytes) {
+uint32_t crc32(const void *data, size_t n_bytes) {
     uint32_t crc = 0xFFFFFFFF;
     const uint8_t *byte_ptr = (const uint8_t *)data;
 
@@ -90,6 +90,54 @@ protopack *retranslate_udp(protopack *pk){
     out->chsum  = htonl(crc32(out, pk->d_size + sizeof(protopack)));
 
     return out;
+}
+
+void proto_print(const protopack *pack, int dir){
+    switch (pack->packtype){
+        case PACK_RACK: {
+            printf(
+                "[prot][ACK] %u %s %u (%u bytes, %u seq)\n",
+                pack->h_to,
+                dir == 0 ? "->": "<-",
+                pack->h_from,
+                pack->d_size,
+                pack->seq
+            );
+        } break;
+
+        case PACK_DATA: {
+            printf(
+                "[prot][DAT] %u %s %u (%u bytes, %u seq): \"%.*s\"\n",
+                pack->h_to,
+                dir == 0 ? "->": "<-",
+                pack->h_from,
+                pack->d_size,
+                pack->seq,
+                pack->d_size,
+                pack->data
+            );
+        } break;
+
+        case PACK_FIN: {
+            printf(
+                "[prot][FIN] %u %s %u (%u bytes, %u seq)\n",
+                pack->h_to,
+                dir == 0 ? "->": "<-",
+                pack->h_from,
+                pack->d_size,
+                pack->seq
+            );
+        } break;
+
+        default: {
+            // printf(
+            //     "[protop] pkt: %s (%u bytes, %u seq)\n", 
+            //     PROTOPACK_TYPES_CHAR[pack->packtype],
+            //     pack->d_size,
+            //     pack->seq
+            // );
+        }
+    }
 }
 
 ssize_t protopack_send(

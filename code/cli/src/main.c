@@ -7,8 +7,60 @@
 #include <stdio.h>
 #include <unistd.h>
 
+void *sender_thr(void *_args){ 
+    rudp_connection *conn = _args;
+    for (int i = 0; i < 1000;){
+        char data[200]; snprintf(data, 50, "Hello %d", i);
+
+        prot_array_lock(&conn->pkts_fhost);
+        int in_flight = conn->pkts_fhost.array.len;
+        prot_array_unlock(&conn->pkts_fhost);
+
+        if (in_flight < 16) { // Окно отправки (например, 16)
+            soter2_isend(conn, data, strlen(data));
+            i++;
+        } else {
+            printf("[loop_sender] in_flight > 16: %d\n", in_flight);
+            usleep(10000); // Ждем подтверждения наших пакетов
+        }
+
+        // printf("[loop_sender] avg_rtt_ms: %li\n", conn->avg_rtt_ms);
+        // usleep(conn->avg_rtt_ms * 1000);
+    }
+
+    printf("sender_end");
+    return NULL;
+}
+
+void *reader_thr(void *_args){ 
+    rudp_connection *conn = _args;
+    for (int i = 0; i < 1000;){
+        int w = rudp_conn_wait(conn, conn->ack_timeout_ms);
+        if (w == 0) {
+            printf("[main][loop] skiped %d iter\n", i);
+            usleep(10000);
+            continue;
+        } else if (w < 0) {
+            if (errno == EAGAIN || errno == EINTR) continue;
+            perror("[main][loop] iwait");
+            break;
+        }
+
+        protopack *r;
+        while ((r = soter2_irecv(conn)) != NULL) {
+            printf("> %.*s  (gseq: %u)\n", r->d_size, r->data, r->seq);
+            free(r);
+            i++;
+        }
+    }
+
+    printf("reader_end");
+
+    return NULL;
+}
+
 int main(){
-    srand(mt_time_get_seconds());
+    srand(mt_time_get_seconds_monocoarse());
 
     soter2_interface intr;
     if (0 > soter2_intr_init(&intr)) {
@@ -34,29 +86,30 @@ int main(){
         return -1;
     }
 
-    state_request req;
-    printf("[main] waiting for new client\n");
-    soter2_intr_wait_state(&intr, -1, &req);
-    printf("[main] got new client\n");
+    // state_request req;
+    // printf("[main] waiting for new client\n");
+    // soter2_intr_wait_state(&intr, -1, &req);
+    // printf("[main] got new client\n");
 
-    // char ip[INET_ADDRSTRLEN]; 
-    // unsigned port, uid;
-    // printf("[main] ip:port:uid > "); fflush(stdin);
-    // scanf("%[^:]:%u:%u", ip, &port, &uid);
+    char ip[INET_ADDRSTRLEN]; 
+    unsigned port, uid;
+    printf("[main] ip:port:uid > "); fflush(stdin);
+    scanf("%[^:]:%u:%u", ip, &port, &uid);
 
     peer_info info;
     rudp_connection *conn = NULL;
-    // soter2_iconnect(&intr, ln_make4(ln_ipv4(ip, port)), uid);
-    soter2_iconnect(&intr, ln_from_uint32(req.ip, req.port), req.uid);
-    soter2_istatewait(&intr, req.uid, PEER_ST_ACTIVE, &info);
+    soter2_iconnect(&intr, ln_make4(ln_ipv4(ip, port)), uid);
+    // soter2_iconnect(&intr, ln_from_uint32(req.ip, req.port), req.uid);
+    soter2_istatewait(&intr, uid, PEER_ST_ACTIVE, &info);
     soter2_intr_statestop(&intr);
-    soter2_inew_conn(&intr, &conn, &info.nfd, req.uid);
+    // soter2_inew_conn(&intr, &conn, &info.nfd, req.uid);
+    soter2_inew_conn(&intr, &conn, &info.nfd, uid);
 
-    e2ee_connection econn;
-    if (0 > soter2_e2ee_wrap(&intr, conn, &econn, req.pubkey)){
-        fprintf(stderr, "[main][e2ee] failed to wrap channel\n");
-        goto end;
-    }
+    // e2ee_connection econn;
+    // if (0 > soter2_e2ee_wrap(&intr, conn, &econn, req.pubkey)){
+    //     fprintf(stderr, "[main][e2ee] failed to wrap channel\n");
+    //     goto end;
+    // }
 
     // printf("[main][e2ee] handshaking...\n");
     // if (0 > e2ee_conn_handshake_init(&econn)){
@@ -74,41 +127,22 @@ int main(){
 
     // printf("[main][e2ee] handshaked!\n");
 
-    for (int i = 0; i < 100000; i++){
-        char data[200]; snprintf(data, 50, "Hello %d", i);
-        
-        while (0 != soter2_isend(conn, data, strlen(data))){
-            usleep(10'000'000);
-        }
+    pthread_t t[2] = {0};
+    pthread_create(&t[0], NULL, sender_thr, conn);
+    pthread_create(&t[1], NULL, reader_thr, conn);
+    sleep(100000);
 
-        // while (0 != e2ee_send(&econn, data, strlen(data))){
-        //     usleep(10'000'000);
-        // }
+    pthread_join(t[0], NULL);
+    pthread_join(t[1], NULL);
 
-        // int w = e2ee_wait(&econn, SOTER_DEAD_DT * 1000);
-        int w = rudp_conn_wait(conn, SOTER_DEAD_DT * 1000);
-        if (w == 0) {
-            continue;
-        } else if (w < 0) {
-            if (errno == EAGAIN || errno == EINTR) continue;
-            perror("[main][loop] iwait");
-            break;
-        }
-
-        // protopack *r = e2ee_recv(&econn);
-        protopack *r = soter2_irecv(conn);
-        printf("> %.*s  (dps: %f, gseq: %u)\n", r->d_size, r->data, soter2_get_DPS(&intr), r->seq);
-        // free(r);
-
-    }
+    rudp_conn_close(conn);
 
     // flushing incoming packets
-    if (0 < e2ee_wait(&econn, 2000)){
-        protopack *r = e2ee_recv(&econn);
-        printf("> %.*s\n", r->d_size, r->data);
-        free(r);
-    }
+    // if (0 < e2ee_wait(&econn, 2000)){
+    //     protopack *r = e2ee_recv(&econn);
+    //     printf("> %.*s\n", r->d_size, r->data);
+    //     free(r);
+    // }
 
-end:
     soter2_intr_end(&intr);
 }

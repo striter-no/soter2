@@ -14,7 +14,7 @@ int rudp_pkt_make(
     out->copy_pack = pack;
     out->state     = state;
     out->seq       = seq;
-    out->timestamp = mt_time_get_millis();
+    out->timestamp = mt_time_get_millis_monocoarse();
 
     return 0;
 }

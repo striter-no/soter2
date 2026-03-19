@@ -9,7 +9,8 @@ int prot_ht_setup(prot_htable* table,
     if (!table) return -1;
     pthread_mutexattr_t attrs;
     pthread_mutexattr_init(&attrs);
-    pthread_mutexattr_settype(&attrs, PTHREAD_MUTEX_RECURSIVE);
+    // pthread_mutexattr_settype(&attrs, PTHREAD_MUTEX_RECURSIVE);
+    pthread_mutexattr_settype(&attrs, PTHREAD_MUTEX_NORMAL);
     pthread_mutex_init(&table->mtx, &attrs);
     pthread_mutexattr_destroy(&attrs);
 

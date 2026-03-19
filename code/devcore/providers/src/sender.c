@@ -68,9 +68,14 @@ int pvd_sender_send(pvd_sender *s, protopack *packet, nnet_fd *to){
         .to   = *to
     };
 
-    prot_queue_push(&s->packets, &ppkt);
+    prot_queue_lock(&s->packets);
+    size_t qlen = s->packets.arr.array.len;
+    _prot_queue_push_unsafe(&s->packets, &ppkt);
+    prot_queue_unlock(&s->packets);
 
-    if (0 > mt_evsock_notify(&s->newpack_es)) {}
+    // if (qlen == 0) {
+        mt_evsock_notify(&s->newpack_es);
+    // }
     return 0;
 }
 
@@ -78,54 +83,52 @@ static void *pvd_sender_worker(void *_args){
     pvd_sender *sender = _args;
     
     while (atomic_load(&sender->is_running)){
-        int r = mt_evsock_wait(&sender->newpack_es, 100);
+        int r = mt_evsock_wait(&sender->newpack_es, 1000);
         if (r < 0) {
             perror("poll()");
         }
         if (r == 0) continue;
         
         pvd_sender_pack_t ppkt = {0};
-        while (0 == prot_queue_pop(&sender->packets, &ppkt)) {
+        // prot_queue_lock(&sender->packets);
+        while (prot_queue_pop(&sender->packets, &ppkt) == 0) {
             if (!ppkt.pack) {
                 fprintf(stderr, "pvd_sender_pack has NULL pack\n");
                 continue;
             }
 
             char buf[2048] = {0};
+            protopack *pkt = ppkt.pack;
+            // proto_print(pkt, 0);
 
-            protopack *retranslated = retranslate_udp(ppkt.pack);
-            if (!retranslated) {
-                fprintf(stderr, "retranslate_udp() failed\n");
-                free(ppkt.pack);
+            size_t d_size = pkt->d_size;
+            size_t total_size = sizeof(protopack) + d_size;
+
+            if (total_size > sizeof(buf)) {
+                fprintf(stderr, "packet too large\n");
+                free(pkt);
+                // abort();
                 continue;
             }
 
-            int packtype = retranslated->packtype;
-            ssize_t s = protopack_send(retranslated, buf);
+            pkt->seq      = htonl(pkt->seq);
+            pkt->d_size   = htonl(pkt->d_size);
+            pkt->h_from   = htonl(pkt->h_from);
+            pkt->h_to     = htonl(pkt->h_to);
+            pkt->chsum    = 0;
 
-            if (s < 0){
-                fprintf(stderr, "protopack_send() failed\n");
-                free(retranslated);
-                free(ppkt.pack);
-                continue;
-            }
+            memcpy(buf, pkt, total_size);
 
-            if (s > (ssize_t)sizeof(buf)){
-                fprintf(stderr, "protopack_send() returned bigger data than expected\n");
-                free(retranslated);
-                free(ppkt.pack);
-                abort();
-            }
+            uint32_t csum = crc32(buf, total_size);
+            ((protopack*)buf)->chsum = htonl(csum);
 
-            naddr_t addr = ln_nfd2addr(&ppkt.to);
-            // printf("[pvd][sender] pkt: %s sending %zd bytes to %s:%u\n",
-            //        PROTOPACK_TYPES_CHAR[packtype], s, addr.ip.v4.ip, addr.ip.v4.port);
-
+            ssize_t s = total_size;
             ln_usock_send(sender->p_usocket, buf, s, &ppkt.to);
 
-            free(retranslated);
-            free(ppkt.pack);
+            free(pkt);
         }
+
+        // prot_queue_unlock(&sender->packets);
     }
 
     return NULL;

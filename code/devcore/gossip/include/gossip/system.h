@@ -12,7 +12,7 @@ typedef struct __attribute__((packed)) {
     uint32_t ip;        // used IP
     uint16_t port;      // opened/used port
     uint32_t version;   // how many retranslates
-    uint32_t timestamp; // when was created
+    uint64_t timestamp; // when was created
 
     uint32_t mtd_size;
     char     metadata[];  // can be public key, signature etc.

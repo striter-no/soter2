@@ -7,7 +7,8 @@ int prot_array_create(size_t element_size, prot_array *arr){
     
     pthread_mutexattr_t attrs;
     pthread_mutexattr_init(&attrs);
-    pthread_mutexattr_settype(&attrs, PTHREAD_MUTEX_RECURSIVE);
+    // pthread_mutexattr_settype(&attrs, PTHREAD_MUTEX_RECURSIVE);
+    pthread_mutexattr_settype(&attrs, PTHREAD_MUTEX_NORMAL);
     pthread_mutex_init(&arr->mtx, &attrs);
     pthread_mutexattr_destroy(&attrs);
 

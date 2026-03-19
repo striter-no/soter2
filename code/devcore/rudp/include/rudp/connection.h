@@ -10,11 +10,15 @@
 #endif
 
 #ifndef RUDP_RETRANSMISSION_CAP
-#define RUDP_RETRANSMISSION_CAP 10
+#define RUDP_RETRANSMISSION_CAP 20
 #endif
 
 #ifndef RUDP_REORDER_WINDOW
 #define RUDP_REORDER_WINDOW 128
+#endif
+
+#ifndef RUDP_SEND_WINDOW
+#define RUDP_SEND_WINDOW 128
 #endif
 
 typedef struct {
@@ -37,6 +41,16 @@ typedef struct {
     uint32_t     last_sended_ack;
     uint32_t     last_recved_ack;
     uint32_t     last_recved_seq;
+
+    uint32_t     last_ack_sent_seq;
+    uint32_t     packets_since_ack;
+    int64_t      last_ack_timestamp;
+    
+    uint32_t     ack_threshold;    
+    int64_t      ack_timeout_ms;   
+    int64_t      avg_rtt_ms;       
+
+    int64_t      oldest_timestamp;
     bool         closed;
 } rudp_connection;
 
@@ -63,6 +77,6 @@ int _rudp_conn_pass_net  (rudp_connection *conn, protopack *pkt);
 int _rudp_conn_wait_net  (rudp_connection *conn, int timeout);
 int _rudp_conn_wait_host (rudp_connection *conn, int timeout);
 int _rudp_conn_reordering(rudp_connection *conn);
-int _rudp_conn_timeouts  (rudp_connection *conn);
+int _rudp_conn_timeouts  (rudp_connection *conn, int64_t now_ms);
 
 #endif

@@ -16,7 +16,8 @@ typedef struct {
     protopack      *copy_pack;
     rudp_pkt_state  state;
 
-    int retransmit_count;
+    int     retransmit_count;
+    int64_t send_timestamp; 
 } rudp_pending_pkt;
 
 int rudp_pkt_make(
