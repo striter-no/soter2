@@ -79,6 +79,8 @@ int soter2_inew_conn(soter2_interface *intr, rudp_connection **conn, nnet_fd *nf
 int soter2_iget_conn(soter2_interface *intr, rudp_connection **conn, uint32_t client_uid);
 
 int soter2_e2ee_wrap(soter2_interface *intr, rudp_connection *conn, e2ee_connection *wrapped, unsigned char other_pubkey[CRYPTO_PUBKEY_BYTES]);
+int soter2_e2ee_handshake(e2ee_connection *econn);
+int soter2_e2ee_end_handshake(e2ee_connection *econn, int timeout);
 
 // Returns packet owned by caller. Caller must free returned packet.
 protopack *soter2_irecv(rudp_connection *conn);

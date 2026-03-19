@@ -150,6 +150,24 @@ int soter2_e2ee_wrap(soter2_interface *intr, rudp_connection *conn, e2ee_connect
     return e2ee_conn_init(wrapped, conn, intr->self_sign, other_pubkey);
 }
 
+int soter2_e2ee_end_handshake(e2ee_connection *econn, int timeout){
+    if (0 >= e2ee_conn_handshake_wait(econn, timeout)){
+        fprintf(stderr, "[main][e2ee] hs wait failed\n");
+        return 1;
+    }
+
+    if (0 > e2ee_conn_handshake_resp(econn)){
+        fprintf(stderr, "[main][e2ee] hs response failed\n");
+        return -1;
+    }
+
+    return 0;
+}
+
+int soter2_e2ee_handshake(e2ee_connection *econn){
+    return e2ee_conn_handshake_init(econn);
+}
+
 void soter2_iconnect(soter2_interface *intr, naddr_t address, uint32_t UID){
     peers_db_add(&intr->pdb, (peer_info){
         .last_seen = mt_time_get_seconds_monocoarse(),

@@ -72,16 +72,17 @@ int prot_queue_upush(prot_queue *q, const void *element){
     if (!q) return -1;
     
     prot_array_lock(&q->arr);
-
+    
     for (size_t i = 0; i < q->count; i++){
-        if (memcmp(element, _prot_array_at_unsafe(&q->arr, i), q->arr.array.element_size) == 0){
+        size_t idx = (q->head + i) % q->arr.array.len; 
+        void *existing = (char*)q->arr.array.elements + (idx * q->arr.array.element_size);
+        if (memcmp(element, existing, q->arr.array.element_size) == 0){
             prot_array_unlock(&q->arr);
             return 0;
         }
     }
-
-    _prot_array_push_unsafe(&q->arr, element);
-
+    
+    _prot_queue_push_unsafe(q, element);
     prot_array_unlock(&q->arr);
     return 0;
 }

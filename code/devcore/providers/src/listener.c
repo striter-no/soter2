@@ -17,7 +17,6 @@ int pvd_listener_new(pvd_listener *l, ln_usocket *p_usocket){
 void pvd_listener_end(pvd_listener *l){
     if (!l) return;
 
-    printf("listener end\n");
     atomic_store(&l->is_running, false);
     pthread_join(l->daemon, NULL);
 
