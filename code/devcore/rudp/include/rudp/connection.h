@@ -68,6 +68,9 @@ void rudp_conn_close(rudp_connection *conn);
 // -- interface
 
 int rudp_conn_send(rudp_connection *conn, protopack *pkt);
+
+// On success returns packet ownership to caller.
+// Caller must free(*pkt).
 int rudp_conn_recv(rudp_connection *conn, protopack **pkt);
 int rudp_conn_wait(rudp_connection *conn, int timeout);
 

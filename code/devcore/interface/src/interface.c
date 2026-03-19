@@ -205,6 +205,8 @@ int soter2_isend_r(rudp_connection *conn, protopack *p){
 }
 
 int soter2_isend(rudp_connection *conn, void *data, size_t dsize){
+    if (!conn || conn->closed) return -1;
+    
     protopack *p = udp_make_pack(
         0, conn->s_uid, conn->c_uid, PACK_DATA, data, dsize
     );

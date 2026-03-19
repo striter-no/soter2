@@ -80,7 +80,9 @@ int soter2_iget_conn(soter2_interface *intr, rudp_connection **conn, uint32_t cl
 
 int soter2_e2ee_wrap(soter2_interface *intr, rudp_connection *conn, e2ee_connection *wrapped, unsigned char other_pubkey[CRYPTO_PUBKEY_BYTES]);
 
+// Returns packet owned by caller. Caller must free returned packet.
 protopack *soter2_irecv(rudp_connection *conn);
+
 int soter2_isend_r     (rudp_connection *conn, protopack *p);
 int soter2_isend       (rudp_connection *conn, void *data, size_t dsize);
 

@@ -119,10 +119,12 @@ int rudp_close_conncetion(
     if (!disp) return -1;
 
     rudp_connection **conn = prot_table_get(&disp->connections, &UID);
-    if (!conn || !(*conn)) return -1;
+    if (!conn) return -1;
+    if (!(*conn)){
+        return prot_table_remove(&disp->connections, &UID);
+    }
 
     rudp_conn_close(*conn);
-    free(*conn);
 
     return prot_table_remove(&disp->connections, &UID);
 }
@@ -172,6 +174,7 @@ static void *_rudp_dispatcher_worker(void *_args){
     int64_t now_ms = mt_time_get_millis_monocoarse();
     while (atomic_load(&disp->is_running)){
         int r = mt_evsock_wait(&disp->ev_passed, 100);
+        mt_evsock_drain(&disp->ev_passed);
 
         if (r < 0){
             perror("poll");
@@ -214,13 +217,13 @@ static void *_rudp_dispatcher_worker(void *_args){
         mt_evsock_drain(&disp->ev_passed);
         
         protopack *pkt;
-        while (0 == prot_queue_pop(&disp->passed_pkts, &pkt)){
+        while (0 == prot_queue_pop(&disp->passed_pkts, &pkt) && atomic_load(&disp->is_running)){
             uint32_t c_uid = pkt->h_from;
             rudp_connection *connection = NULL;
             if (0 > rudp_get_connection(disp, c_uid, &connection)){
-                fprintf(stderr, "[rudp][disp][worker] error: no connection established with %u\n", c_uid);
-                // free(pkt);
-                prot_queue_push(&disp->passed_pkts, &pkt);
+                // fprintf(stderr, "[rudp][disp][worker] error: no connection established with %u\n", c_uid);
+                free(pkt);
+                // prot_queue_push(&disp->passed_pkts, &pkt);
                 continue;
             }
 
@@ -237,11 +240,18 @@ static void _rudp_dispatcher_net_handler(rudp_dispatcher *disp, rudp_connection 
     // printf("[neth] got pkt: %u seq (%s)\n", pkt->seq, PROTOPACK_TYPES_CHAR[pkt->packtype]);
     
     if (pkt->packtype == PACK_DATA){
-        _rudp_conn_pass_net(conn, pkt);
-        
-        bool should_send_ack = false;
+        uint32_t pkt_seq = pkt->seq;
         uint32_t expected = (conn->last_recved_seq == UINT32_MAX) ? 0 : conn->last_recved_seq + 1;
-        if (pkt->seq != expected) {
+
+        if (0 > _rudp_conn_pass_net(conn, pkt)) {
+            free(pkt);   // only because ownership transfer failed
+            return;
+        }
+        pkt = NULL; // ownership transferred
+
+        bool should_send_ack = false;
+
+        if (pkt_seq != expected) {
             should_send_ack = true;
         } else {
             _rudp_conn_reordering(conn);

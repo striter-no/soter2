@@ -82,10 +82,15 @@ void rudp_conn_close(rudp_connection *conn){ // done
         free(pkt->copy_pack);
     }
 
+    for (size_t i = 0; i < prot_array_len(&conn->pkts_reorder_buf); i++) {
+        protopack **pp = prot_array_at(&conn->pkts_reorder_buf, i);
+        if (pp && *pp) free(*pp);
+    }
+
     // free containers
     prot_queue_end(&conn->pkts_net);
     prot_queue_end(&conn->pkts_reordered);
-    prot_array_end(&conn->pkts_reorder_buf); // doesn't own any packets, so no additional actions needed 
+    prot_array_end(&conn->pkts_reorder_buf);
     prot_array_end(&conn->pkts_fhost);
 
     // close evsocks
@@ -149,7 +154,7 @@ int rudp_conn_recv(rudp_connection *conn, protopack **pkt){
 }
 
 int rudp_conn_wait(rudp_connection *conn, int timeout){
-    if (!conn) return -1;
+    if (!conn || conn->closed) return -1;
 
     int r = mt_evsock_wait(&conn->ev_reordered, timeout);
     if (r > 0) mt_evsock_drain(&conn->ev_reordered);
@@ -248,13 +253,15 @@ int _rudp_conn_reordering(rudp_connection *conn){ // done
         // printf("[rudp] next_needed: %u, seq: %u, last_recved_seq: %u\n", next_needed, p->seq, conn->last_recved_seq);
 
         if (p->seq == next_needed) {
-            // printf("[rudp] got packet %u seq: %u bytes\n", p->seq, p->d_size);
-            prot_queue_push(&conn->pkts_reordered, &p);
-            conn->last_recved_seq = p->seq;
-            mt_evsock_notify(&conn->ev_reordered);
+            uint32_t seq = p->seq;
+
+            conn->last_recved_seq = seq;
             dyn_array_remove(&conn->pkts_reorder_buf.array, 0);
+
+            prot_queue_push(&conn->pkts_reordered, &p);
+            mt_evsock_notify(&conn->ev_reordered);
         } else {
-            break; 
+            break;
         }
     }
     

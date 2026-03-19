@@ -125,7 +125,6 @@ int prot_queue_peek(prot_queue *q, void *out) {
 }
 
 void prot_queue_end(prot_queue *q){
-    printf("[prot_queue_end] called!\n");
     prot_array_end(&q->arr);
 }
 
