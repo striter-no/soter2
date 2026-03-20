@@ -8,7 +8,7 @@ If:
 	PathMatch: [.*\.c, .*\.h]
 CompileFlags:
 	Add:
-		- "-std=c2x"
+		- "-std=c11"
 ---
 If:
 	PathExclude: [.*\.c, .*\.h]

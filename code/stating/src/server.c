@@ -43,7 +43,7 @@ static int state_handler(protopack *pck, const nnet_fd *nfd, pvd_sender *s, void
     return 0;
 }
 
-static int uid_filter(size_t, void *elem, void *ctx){
+static int uid_filter(size_t _, void *elem, void *ctx){ (void)_;
     server_request *r = elem;
     uint32_t      *uid = ctx;
 

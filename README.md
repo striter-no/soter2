@@ -16,7 +16,13 @@
 
 ## How to build
 
-1. You need to install [libsodium](https://github.com/jedisct1/libsodium) in order to use cryptographic modules
+1. You need to install [libsodium](https://github.com/jedisct1/libsodium) in order to use cryptographic modules. Also you can use `code/sodium_inst.sh` script
+
+```sh
+# Automaticly installs libsodium in /usr/local
+sudo ./code/sodium_inst.sh
+```
+
 2. You need **ABS** build system in order to build this project:
 
 ```sh

@@ -1,4 +1,5 @@
 #include <netinet/in.h>
+#include <stdbool.h>
 #include <sodium.h>
 
 #ifndef CRYPTO_KEYS_H

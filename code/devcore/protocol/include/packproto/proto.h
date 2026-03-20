@@ -5,7 +5,7 @@
 
 #ifndef PROTOCOL_PACKPROTO_H
 
-typedef enum: uint8_t {
+typedef enum {
     PACK_DATA,      // RUDP
     PACK_ACK,       // no RUDP (natpunching module)
     PACK_PING,      // no RUDP (integrety doesnt matter)
