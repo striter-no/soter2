@@ -188,19 +188,18 @@ int gossip_entry_copy(gossip_entry **dest, gossip_entry *src){
 
 gossip_entry *gossip_create_entry(
     uint32_t uid,       // UID
-    uint32_t ip,        // used IP
-    uint16_t port,      // opened/used port
+    naddr_t *addr,
 
     uint32_t mtd_size,
-    char    *metadata
+    char    *metadata,
+    bool     convert_hton
 ){
     gossip_entry *out = malloc(sizeof(gossip_entry) + mtd_size);
     out->version = 0;
     out->timestamp = mt_time_get_seconds();
     
     out->uid = uid;
-    out->ip = ip;
-    out->port = port;
+    out->addr = convert_hton ? ln_hton(addr): *addr;
     out->mtd_size = mtd_size;
 
     memcpy(out->metadata, metadata, mtd_size);

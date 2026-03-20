@@ -3,14 +3,14 @@
 #include <base/prot_array.h>
 #include <packproto/proto.h>
 #include <multithr/time.h>
+#include <lownet/core.h>
 
 #ifndef GOSSIP_SYSTEM_H
 #define GOSSIP_DEAD_DT (60 * 60) // one hour
 
 typedef struct __attribute__((packed)) {
     uint32_t uid;       // UID
-    uint32_t ip;        // used IP
-    uint16_t port;      // opened/used port
+    naddr_t  addr;
     uint32_t version;   // how many retranslates
     uint64_t timestamp; // when was created
 
@@ -50,11 +50,11 @@ int gossip_entry_copy(gossip_entry **dest, gossip_entry *src);
 
 gossip_entry *gossip_create_entry(
     uint32_t uid,       // UID
-    uint32_t ip,        // used IP
-    uint16_t port,      // opened/used port
+    naddr_t *addr,
 
     uint32_t mtd_size,
-    char    *metadata
+    char    *metadata,
+    bool     convert_hton
 );
 
 #endif

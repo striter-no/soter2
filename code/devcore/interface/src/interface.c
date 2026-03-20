@@ -524,7 +524,7 @@ static int gossip_iter(const peer_info *info, app_context *ctx){
     if (rand() % 2 == 0) return 0;
 
     naddr_t addr = ln_nfd2addr(&info->nfd);
-    gossip_entry *entry = gossip_create_entry(info->UID, ln_to_uint32(&addr), addr.ip.v4.port, 0, NULL);
+    gossip_entry *entry = gossip_create_entry(info->UID, &addr, 0, NULL, true);
     gossip_new_entry(ctx->g_syst, entry);
     free(entry);
 
