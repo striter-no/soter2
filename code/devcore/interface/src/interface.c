@@ -477,9 +477,9 @@ pack_processing:
 static int state_iter(soter2_interface *intr){
     // requesting to server
     state_request r = state_rcreate(
-        ln_to_uint32(&intr->sock.addr), 
-        intr->sock.addr.ip.v4.port,
-        intr->rudp_disp.self_uid, REQUEST_CONNECTION, 
+        intr->sock.addr, 
+        intr->rudp_disp.self_uid, 
+        REQUEST_CONNECTION, 
         intr->self_sign
     );
 

@@ -1,5 +1,6 @@
 #include <netinet/in.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 #ifndef LOWNET_CORE_H
 typedef struct {
@@ -38,6 +39,9 @@ naddr_t ln_make6(naddr_ipv6 ipv6);
 naddr_t ln_uniq(const char *uni_addr, unsigned short port);
 int ln_uni(const char *uni_addr, unsigned short port, naddr_t *out);
 
+const char *ln_gip(const naddr_t *addr);
+uint16_t ln_gport(const naddr_t *addr);
+
 // NOTICE: port IS NOT set (== 0) after operation
 int ln_resolve(const char *domain, naddr_t *output);
 
@@ -47,6 +51,9 @@ int ln_netfd(naddr_t *addr, nnet_fd *out);
 naddr_t  ln_nfd2addr(const nnet_fd *fd);
 nnet_fd  ln_netfdq(naddr_t *addr);
 naddr_t  ln_resolveq(const char *domain, unsigned port);
+
+naddr_t  ln_hton(const naddr_t *addr);
+naddr_t  ln_ntoh(const naddr_t *addr);
 
 naddr_t  ln_from_uint32(uint32_t ip_bin, uint16_t port);
 uint32_t ln_to_uint32(naddr_t *addr);

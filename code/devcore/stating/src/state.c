@@ -39,8 +39,7 @@ int state_sys_wait(state_system *sys, state_request *out, int timeout){
 }
 
 state_request state_rcreate(
-    uint32_t    ip,
-    uint16_t    port,
+    naddr_t     addr,
     uint32_t    uid,
     state_rtype type,
     sign        s
@@ -48,8 +47,7 @@ state_request state_rcreate(
     state_request req;
     memset(&req, 0, sizeof(req));
 
-    req.ip    = htonl(ip);
-    req.port  = htons(port);
+    req.addr  = ln_hton(&addr);
     req.uid   = htonl(uid);
     req.nonce = htonl(randombytes_random());
     req.type  = (uint8_t)(type);
@@ -60,8 +58,7 @@ state_request state_rcreate(
     size_t  offset = 0;
 
     memcpy(sign_buff + offset, &req.nonce, sizeof(req.nonce)); offset += sizeof(req.nonce);
-    memcpy(sign_buff + offset, &req.ip, sizeof(req.ip)); offset += sizeof(req.ip);
-    memcpy(sign_buff + offset, &req.port, sizeof(req.port)); offset += sizeof(req.port);
+    memcpy(sign_buff + offset, &req.addr, sizeof(req.addr)); offset += sizeof(req.addr);
     memcpy(sign_buff + offset, &req.uid, sizeof(req.uid)); offset += sizeof(req.uid);
     memcpy(sign_buff + offset, &req.type, sizeof(req.type)); offset += sizeof(req.type);
     memcpy(sign_buff + offset, &req.timestamp, sizeof(req.timestamp)); offset += sizeof(req.timestamp);
@@ -82,8 +79,7 @@ int state_rreceive(
     size_t  offset = 0;
 
     memcpy(sign_buff + offset, &req.nonce, sizeof(req.nonce)); offset += sizeof(req.nonce);
-    memcpy(sign_buff + offset, &req.ip, sizeof(req.ip)); offset += sizeof(req.ip);
-    memcpy(sign_buff + offset, &req.port, sizeof(req.port)); offset += sizeof(req.port);
+    memcpy(sign_buff + offset, &req.addr, sizeof(req.addr)); offset += sizeof(req.addr);
     memcpy(sign_buff + offset, &req.uid, sizeof(req.uid)); offset += sizeof(req.uid);
     memcpy(sign_buff + offset, &req.type, sizeof(req.type)); offset += sizeof(req.type);
     memcpy(sign_buff + offset, &req.timestamp, sizeof(req.timestamp)); offset += sizeof(req.timestamp);
@@ -94,8 +90,8 @@ int state_rreceive(
         return -1;
     }
 
-    req.ip    = ntohl(req.ip);
-    req.port  = ntohs(req.port);
+    naddr_t net_ord = req.addr;
+    req.addr  = ln_ntoh(&net_ord);
     req.uid   = ntohl(req.uid);
     req.nonce = ntohl(req.nonce);
     req.timestamp = ntohll(req.timestamp);
@@ -111,8 +107,9 @@ int state_rreceive(
 
 state_request state_retranslate(state_request req){
     state_request o;
-    o.ip    = htonl(req.ip);
-    o.port  = htons(req.port);
+
+    naddr_t addr = req.addr;
+    o.addr  = ln_hton(&addr);
     o.uid   = htonl(req.uid);
     o.nonce = htonl(req.nonce);
     o.timestamp = htonll(req.timestamp);

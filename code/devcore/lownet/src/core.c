@@ -69,6 +69,20 @@ int ln_uni(const char *uni_addr, unsigned short port, naddr_t *out){
     return -1;
 }
 
+const char *ln_gip(const naddr_t *addr){
+    switch (addr->t) {
+        case nADDR_IPV4: return addr->ip.v4.ip;
+        case nADDR_IPV6: return addr->ip.v6.ip;
+    }
+}
+
+uint16_t ln_gport(const naddr_t *addr){
+    switch (addr->t) {
+        case nADDR_IPV4: return addr->ip.v4.port;
+        case nADDR_IPV6: return addr->ip.v6.port;
+    }
+}
+
 naddr_t ln_uniq(const char *uni_addr, unsigned short port){
     if (!uni_addr) return (naddr_t){0};
     
@@ -236,6 +250,43 @@ uint32_t ln_to_uint32(naddr_t *addr) {
     
     return ip_bin; 
 }
+
+naddr_t ln_hton(const naddr_t *addr){
+    switch (addr->t) {
+        case nADDR_IPV4: 
+            return ln_make4(ln_ipv4(
+                addr->ip.v4.ip, 
+                htons(addr->ip.v4.port)
+            ));
+
+        case nADDR_IPV6: 
+            return ln_make6(ln_ipv6(
+                addr->ip.v6.ip, 
+                htons(addr->ip.v6.port)
+            ));
+    }
+
+    return (naddr_t){0};
+}
+
+naddr_t ln_ntoh(const naddr_t *addr){
+    switch (addr->t) {
+        case nADDR_IPV4: 
+            return ln_make4(ln_ipv4(
+                addr->ip.v4.ip, 
+                ntohs(addr->ip.v4.port)
+            ));
+
+        case nADDR_IPV6: 
+            return ln_make6(ln_ipv6(
+                addr->ip.v6.ip, 
+                ntohs(addr->ip.v6.port)
+            ));
+    }
+
+    return (naddr_t){0};
+}
+
 
 static uint32_t murmurhash3_32(const char* key, uint32_t len, uint32_t seed) {
     uint32_t c1 = 0xcc9e2d51;

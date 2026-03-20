@@ -15,8 +15,7 @@ typedef enum {
 } state_rtype;
 
 typedef struct __attribute__((packed)) {
-    uint32_t ip;
-    uint16_t port;
+    naddr_t  addr;
     uint32_t uid;
     unsigned char pubkey[CRYPTO_PUBKEY_BYTES];
     unsigned char signature[CRYPTO_SIGN_BYTES];
@@ -38,8 +37,7 @@ int state_sys_wait(state_system *sys, state_request *out, int timeout);
 int state_sys_new_ans(state_system *sys, state_request *req);
 
 state_request state_rcreate(
-    uint32_t    ip,
-    uint16_t    port,
+    naddr_t    addr,
     uint32_t    uid,
     state_rtype type,
     sign        s

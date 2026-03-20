@@ -20,10 +20,10 @@ int main(void){
     nat_type nt = soter2_intr_STUN(&intr,  addresses, sizeof(addresses) / sizeof(addresses[0]));
 
     printf("Current NAT type: %s\n", strnattype(nt));
-    printf("My address: %s:%u:%u\n", intr.sock.addr.ip.v4.ip, intr.sock.addr.ip.v4.port, intr.rudp_disp.self_uid);
+    printf("My address: %s:%u:%u\n", ln_gip(&intr.sock.addr), ln_gport(&intr.sock.addr), intr.rudp_disp.self_uid);
 
     int st_UID1 = soter2_intr_stateconn(&intr, ln_uniq("127.0.0.1", 9000), 2);
-    int st_UID2 = soter2_intr_stateconn(&intr, ln_uniq("192.168.1.5", 9001), 2);
+    // int st_UID2 = soter2_intr_stateconn(&intr, ln_uniq("192.168.1.5", 9001), 2);
 
     if (0 > soter2_intr_run(&intr)){
         fprintf(stderr, "[main] failed to run interface\n");
@@ -37,11 +37,11 @@ int main(void){
 
     peer_info info;
     rudp_connection *conn = NULL;
-    soter2_iconnect(&intr, ln_from_uint32(req.ip, req.port), req.uid);
+    soter2_iconnect(&intr, req.addr, req.uid);
     soter2_istatewait(&intr, req.uid, PEER_ST_ACTIVE, &info);
     
     soter2_intr_statestop(&intr, st_UID1);
-    soter2_intr_statestop(&intr, st_UID2);
+    // soter2_intr_statestop(&intr, st_UID2);
     soter2_inew_conn(&intr, &conn, &info.nfd, req.uid);
 
     printf("[main] e2ee wrapping...\n");
