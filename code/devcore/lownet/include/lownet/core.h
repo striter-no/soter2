@@ -59,7 +59,7 @@ naddr_t  ln_from_uint32(uint32_t ip_bin, uint16_t port);
 uint32_t ln_to_uint32(naddr_t *addr);
 
 int      ln_wait_netfd(nnet_fd *fd, int events, int timeout);
-uint32_t ln_nfd2hash(nnet_fd *fd);
+uint32_t ln_nfd2hash(const nnet_fd *fd);
 
 bool     ln_addrcmp(naddr_t *a, naddr_t *b);
 

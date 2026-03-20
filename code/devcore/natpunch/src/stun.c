@@ -42,8 +42,6 @@ int natp_request_stun(
         perror("sendto");
         return -1;
     }
-    // fprintf(stderr, "[STUN] sent %zd bytes to %s:%d\n", s, 
-    //         stun_addr.ip.v4.ip, stun_addr.ip.v4.port);
 
     uint8_t buf[1024] = {0};
     struct sockaddr_storage from;

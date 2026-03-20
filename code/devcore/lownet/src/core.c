@@ -333,15 +333,37 @@ static uint32_t murmurhash3_32(const char* key, uint32_t len, uint32_t seed) {
     return h;
 }
 
-uint32_t ln_nfd2hash(nnet_fd *fd){
-    char data[sizeof(uint32_t) + sizeof(uint16_t)] = {0};
+uint32_t ln_nfd2hash(const nnet_fd *fd){
+    if (!fd) return 0;
     
-    naddr_t addr = ln_nfd2addr(fd);
-    memcpy(data, &(uint32_t){ln_to_uint32(&addr)}, sizeof(uint32_t));
-    memcpy(data + sizeof(uint32_t), &addr.ip.v4.port, sizeof(uint16_t));
-
-    return murmurhash3_32(
-        data, sizeof(uint32_t) + sizeof(uint16_t), 0xDEADBEF
-    );
+    const struct sockaddr_storage *ss = &fd->addr;
+    char data[18];
+    size_t data_len = 0;
+    
+    if (ss->ss_family == AF_INET) {
+        const struct sockaddr_in *sin = (const struct sockaddr_in *)ss;
+        memcpy(data, &sin->sin_addr.s_addr, sizeof(uint32_t));
+        data_len = sizeof(uint32_t);
+    } 
+    else if (ss->ss_family == AF_INET6) {
+        const struct sockaddr_in6 *sin6 = (const struct sockaddr_in6 *)ss;
+        memcpy(data, &sin6->sin6_addr.s6_addr, sizeof(struct in6_addr));
+        data_len = sizeof(struct in6_addr);
+    } 
+    else {
+        fprintf(stderr, "[lownet] nfd2hash: unknown family %d\n", ss->ss_family);
+        return 0;
+    }
+    
+    uint16_t port = 0;
+    if (ss->ss_family == AF_INET) {
+        port = ((const struct sockaddr_in *)ss)->sin_port;
+    } else {
+        port = ((const struct sockaddr_in6 *)ss)->sin6_port;
+    }
+    memcpy(data + data_len, &port, sizeof(uint16_t));
+    data_len += sizeof(uint16_t);
+    
+    return murmurhash3_32(data, data_len, 0xDEADBEF);
 }
 

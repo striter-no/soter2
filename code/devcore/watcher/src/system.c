@@ -113,10 +113,6 @@ static void *watcher_worker(void *_args){
         }
 
         if (w->handlers[pkt->packtype].foo){
-            naddr_t addr = ln_nfd2addr(&wpkt.from_who);
-
-            // printf("[watcher] calling handler for %d\n", pkt->packtype);
-            // printf("... [watcher] from_who: %u, %s:%u\n", wpkt.from_who.rfd, addr.ip.v4.ip, addr.ip.v4.port);
             w->handlers[pkt->packtype].foo(pkt, &wpkt.from_who, w->sender, w->handlers[pkt->packtype].ctx);
         } else {
             fprintf(stderr, "[watcher] no handler set for %d\n", pkt->packtype);

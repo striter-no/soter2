@@ -36,8 +36,8 @@ int nat_get_type(
     addr[1] = client->addr;
 
     // ln_usock_close(client);
-    *type = (addr[0].ip.v4.port == addr[1].ip.v4.port) ? (
-        (addr[0].ip.v4.port == port) ? NAT_STATIC: NAT_DYNAMIC
+    *type = (ln_gport(&addr[0]) == ln_gport(&addr[1])) ? (
+        (ln_gport(&addr[0]) == port) ? NAT_STATIC: NAT_DYNAMIC
     ): NAT_SYMMETRIC;
 
     return 0;
