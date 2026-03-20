@@ -139,7 +139,6 @@ int rudp_close_conncetion(
     }
 
     rudp_conn_close(*conn);
-
     return prot_table_remove(&disp->connections, &UID);
 }
 
@@ -211,10 +210,10 @@ static void *_rudp_dispatcher_worker(void *_args){
                     continue;
                 }
                 rudp_connection *conn = *((rudp_connection**)pair->second);
-                if (conn->closed){
-                    dyn_array_remove(&disp->connections.table.array, i);
-                    continue;
-                }
+                //if (conn->closed){
+                //    dyn_array_remove(&disp->connections.table.array, i);
+                //    continue;
+                //}
                 conns[r_size++] = conn;
                 i++;
             }

@@ -29,8 +29,6 @@ int soter2_intr_init(
     if (0 > rele_dispatcher_new(&intr->rele_disp, &intr->sender, UID)) return -1;
 
     if (0 > mt_evsock_new(&intr->_new_active_conn)) return -1;
-
-    if (0 > prot_queue_create(sizeof(state_request), &intr->state_peers)) return -1;
     if (0 > prot_table_create(
         sizeof(int), sizeof(soter2_state_intr), 
         DYN_OWN_BOTH, &intr->state_servs
@@ -122,14 +120,6 @@ void soter2_intr_end(soter2_interface *intr){
 
     ln_usock_close(&intr->sock);
     pthread_mutex_destroy(&intr->rate_mtx);
-
-    prot_table_lock(&intr->_active_conns);
-    for (size_t i = 0; i < intr->_active_conns.table.array.len; i++) {
-        dyn_pair *pair = (dyn_pair *)dyn_array_at(&intr->_active_conns.table.array, i);    
-        rudp_connection **conn = pair->second;
-        if (conn && (*conn)) free(*conn);
-    }
-    prot_table_unlock(&intr->_active_conns);
     prot_table_end(&intr->_active_conns);
 
     mt_evsock_close(&intr->_new_active_conn);
@@ -394,6 +384,23 @@ float soter2_get_DPS(soter2_interface *intr){
     return a;
 }
 
+int soter2_close_conn(soter2_interface *intr, uint32_t UID){
+    if (!intr) return -1;
+
+    rudp_connection** ptr = prot_table_get(
+        &intr->_active_conns,
+        &UID
+    );
+
+    if (ptr && (*ptr)) {
+        rudp_close_conncetion(&intr->rudp_disp, UID);
+        free(*ptr);
+    }
+
+    prot_table_remove(&intr->_active_conns, &UID);
+    return -1;
+}
+
 // -- workers
 
 // always listen to state server
@@ -454,7 +461,7 @@ static void* _state_worker(void *_args){
     return 0;
 }
 
-static int ping_iter  (const peer_info *info, app_context *ctx);
+static int ping_iter  (const peer_info *info, soter2_interface *intr);
 static int gossip_iter(const peer_info *info, app_context *ctx);
 static int relay_iter (const peer_info *info, protopack *unpacked, rele_dispatcher *disp);
 static int state_iter (soter2_interface *intr);
@@ -496,7 +503,7 @@ static void *iter_daemon(void *_args){
 
         for (size_t i = 0; i < snapshot_sz; i++){
             peer_info info = snapshot[i];
-            if (!ping_iter(&info, &intr->ctx)) continue;
+            if (!ping_iter(&info, intr)) continue;
 
             peers_db_remove(&intr->pdb, info.UID);
         }
@@ -607,15 +614,17 @@ static int state_iter(soter2_interface *intr){
     return 0;
 }
 
-static int ping_iter(const peer_info *info, app_context *ctx){
-    if (ctx->now_ms - info->last_seen >= SOTER_DEAD_DT * 1000){
+static int ping_iter(const peer_info *info, soter2_interface *intr){
+    if (intr->ctx.now_ms - info->last_seen >= SOTER_DEAD_DT * 1000){
         printf("Dead peer detected: %u\n", info->UID);
+
+        soter2_close_conn(intr, info->UID);
         return 1;
     }
 
-    if (ctx->now_ms - info->last_seen >= SOTER_REPING_DT * 1000){
-        protopack *ping = proto_msg_quick(ctx->rudp->self_uid, info->UID, 0, PACK_PING);
-        pvd_sender_send(ctx->sender, ping, &info->nfd);
+    if (intr->ctx.now_ms - info->last_seen >= SOTER_REPING_DT * 1000){
+        protopack *ping = proto_msg_quick(intr->rudp_disp.self_uid, info->UID, 0, PACK_PING);
+        pvd_sender_send(&intr->sender, ping, &info->nfd);
         free(ping);
     }
 

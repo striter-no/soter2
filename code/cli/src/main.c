@@ -60,7 +60,7 @@ int main(void){
     // raw_transport(&intr, conn);
     e2ee_transport(&intr, &econn);
 
-    rudp_close_conncetion(&intr.rudp_disp, conn->c_uid);
+    soter2_close_conn(&intr, conn->c_uid);
 
     soter2_intr_end(&intr);
 }

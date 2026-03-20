@@ -34,7 +34,6 @@ typedef struct {
     int64_t    state_last_called;
 
     state_system ssyst;
-    prot_queue   state_peers;
 
     // -- networking
     ln_usocket sock;
@@ -94,10 +93,11 @@ void soter2_iconnect(
     const unsigned char pubkey[CRYPTO_PUBKEY_BYTES]
 );
 
-int  soter2_istatewait(soter2_interface *intr, uint32_t client_uid, peer_state state, peer_info *info);
+int soter2_istatewait(soter2_interface *intr, uint32_t client_uid, peer_state state, peer_info *info);
 
 int soter2_intr_wait_conn(soter2_interface *intr, rudp_connection **conn, int timeout);
 int soter2_iget_conn(soter2_interface *intr, rudp_connection **conn, uint32_t client_uid);
+int soter2_close_conn(soter2_interface *intr, uint32_t UID);
 
 int soter2_e2ee_wrap(soter2_interface *intr, rudp_connection *conn, e2ee_connection *wrapped, unsigned char other_pubkey[CRYPTO_PUBKEY_BYTES]);
 int soter2_e2ee_handshake(e2ee_connection *econn);
