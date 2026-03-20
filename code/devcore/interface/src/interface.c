@@ -190,9 +190,94 @@ void soter2_iconnect(soter2_interface *intr, naddr_t address, uint32_t UID){
     free(punch_msg);
 }
 
-nat_type soter2_intr_STUN(soter2_interface *intr, naddr_t stun1, naddr_t stun2){
-    intr->NAT = nat_get_type(&intr->sock, &stun1, &stun2, 1024 + (rand() % 63000));
+typedef struct {
+    stun_addr *addresses;
+    size_t     n_to_resolve;
 
+    prot_array *out_addrs;
+} resolution_args;
+
+static void *_parallel_stun_resolution(void *_args){
+    resolution_args *args = _args;
+
+    for (size_t i = 0; i < args->n_to_resolve; i++){
+        stun_addr curr = *(args->addresses + i);
+
+        naddr_t out;
+        if (0 > ln_uni(curr.uniaddr, curr.port, &out))
+            continue;
+
+        prot_array_push(args->out_addrs, &out);
+    }
+
+    free(_args);
+    return NULL;
+}
+
+nat_type soter2_intr_STUN(soter2_interface *intr, stun_addr *stuns, size_t stuns_n){
+    int paral_res_n = STUN_PARALLEL_RESOLUTION_LIMIT > stuns_n ? stuns_n: STUN_PARALLEL_RESOLUTION_LIMIT;
+
+    prot_array q;
+    prot_array_create(sizeof(naddr_t), &q);
+
+    pthread_t threads[paral_res_n];
+    for (int i = 0; i < paral_res_n; i++){
+        resolution_args *args = malloc(sizeof(*args));
+        args->addresses = stuns + i * (paral_res_n / stuns_n);
+        args->n_to_resolve = paral_res_n / stuns_n;
+        args->out_addrs = &q;
+
+        int r = pthread_create(&threads[i], NULL, _parallel_stun_resolution, args);
+        if (0 > r) {
+            free(args);
+            return NAT_ERROR;
+        }
+    }
+
+    for (int i = 0; i < paral_res_n; i++)
+        pthread_join(threads[i], NULL);
+
+    nat_type type = NAT_ERROR;
+
+    if (prot_array_len(&q) < 2)
+        goto end;
+
+    size_t first_i = 0, second_i = 1, len = prot_array_len(&q);
+    do {
+        uint16_t port = 1024 + (rand() % 63000);
+
+        naddr_t *stun1 = prot_array_at(&q, first_i);
+        naddr_t *stun2 = prot_array_at(&q, second_i);
+
+        int r = nat_get_type(&intr->sock, stun1, stun2, port, &type);
+        if (r == 0) break;
+        if (r == -1) goto end;
+
+        // first stun failed
+        if (r == -2) {
+            first_i++;
+            if (first_i == second_i) 
+                first_i++;
+
+            if (first_i >= len)
+                goto end;
+        }
+
+        // second stun failed
+        if (r == -3) {
+            second_i++;
+            if (second_i == first_i)
+                second_i++;
+
+            if (second_i >= len)
+                goto end;
+        }
+    } while(true);
+
+end:
+    intr->NAT = type;
+
+    prot_array_end(&q);
     return intr->NAT;
 }
 

@@ -31,7 +31,7 @@ int rudp_est_connection(
     rudp_dispatcher *disp, 
     rudp_connection **out_conn,
     uint32_t other_UID,
-    nnet_fd  *nfd
+    const nnet_fd  *nfd
 );
 
 int rudp_get_connection(

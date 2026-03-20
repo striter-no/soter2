@@ -81,7 +81,7 @@ int rudp_est_connection(
     rudp_dispatcher *disp, 
     rudp_connection **out_conn,
     uint32_t other_UID,
-    nnet_fd  *nfd
+    const nnet_fd  *nfd
 ){
     if (!disp || !out_conn) return -1;
 
@@ -322,7 +322,6 @@ static void _rudp_dispatcher_net_handler(rudp_dispatcher *disp, rudp_connection 
                 
                 size_t last_idx = conn->pkts_fhost.array.len - 1;
                 rudp_pending_pkt *last_pkt = _prot_array_at_unsafe(&conn->pkts_fhost, last_idx);
-                rudp_pending_pkt *ppkt_x = _prot_array_at_unsafe(&conn->pkts_fhost, last_idx);
                 *ppkt = *last_pkt;
 
                 // printf("[neth] removing from %u seq -> %u (x = %u seq)\n", pkt->seq, ppkt->seq, ppkt_x->seq);

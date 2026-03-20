@@ -3,7 +3,7 @@
 #include <unistd.h>
 
 static void e2ee_transport(soter2_interface *intr, e2ee_connection *conn);
-int main(){
+int main(void){
     srand(mt_time_get_seconds_monocoarse());
 
     soter2_interface intr;
@@ -12,16 +12,17 @@ int main(){
         return -1;
     }
 
-    nat_type nt = soter2_intr_STUN(
-        &intr, 
-        ln_resolveq("stun.sipnet.ru", 3478),
-        ln_resolveq("stun.ekiga.net", 3478)
-    );
+    stun_addr addresses[] = {
+        {"stun.sipnet.ru", 3478},
+        {"stun.ekiga.net", 3478}
+    };
+
+    nat_type nt = soter2_intr_STUN(&intr,  addresses, sizeof(addresses) / sizeof(addresses[0]));
 
     printf("Current NAT type: %s\n", strnattype(nt));
     printf("My address: %s:%u:%u\n", intr.sock.addr.ip.v4.ip, intr.sock.addr.ip.v4.port, intr.rudp_disp.self_uid);
 
-    soter2_intr_stateconn(&intr, ln_make4(ln_ipv4("127.0.0.1", 9000)), 2);
+    soter2_intr_stateconn(&intr, ln_uniq("127.0.0.1", 9000), 2);
 
     if (0 > soter2_intr_run(&intr)){
         fprintf(stderr, "[main] failed to run interface\n");

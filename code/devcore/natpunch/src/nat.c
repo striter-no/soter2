@@ -1,11 +1,13 @@
 #include <npunch/nat.h>
 #include <stdio.h>
 
-nat_type nat_get_type(
+int nat_get_type(
     ln_usocket *client,
     naddr_t *first_stun,
     naddr_t *second_stun,
-    unsigned short port
+    unsigned short port,
+
+    nat_type *type
 ){
     // ln_usocket client;
     // if (0 > ln_usock_new(&client)) return -1;
@@ -19,24 +21,26 @@ nat_type nat_get_type(
         client->fd.rfd,
         (const struct sockaddr*)&client->fd.addr,
         client->fd.addr_len
-    )) {perror("bind"); return NAT_SYMMETRIC; }
+    )) {perror("bind"); return -1; }
 
     if (0 > natp_request_stun(client, first_stun)){
         ln_usock_close(client);
-        return NAT_SYMMETRIC;
+        return -2;
     }
     addr[0] = client->addr;
 
     if (0 > natp_request_stun(client, second_stun)){
         ln_usock_close(client);
-        return NAT_SYMMETRIC;
+        return -3;
     }
     addr[1] = client->addr;
 
     // ln_usock_close(client);
-    return (addr[0].ip.v4.port == addr[1].ip.v4.port) ? (
+    *type = (addr[0].ip.v4.port == addr[1].ip.v4.port) ? (
         (addr[0].ip.v4.port == port) ? NAT_STATIC: NAT_DYNAMIC
     ): NAT_SYMMETRIC;
+
+    return 0;
 }
 
 const char *strnattype(nat_type type){
@@ -45,6 +49,7 @@ const char *strnattype(nat_type type){
         case NAT_SYMMETRIC: answer = "SYMMETRIC"; break;
         case NAT_DYNAMIC:   answer = "DYNAMIC";   break;
         case NAT_STATIC:    answer = "STATIC";    break;
+        case NAT_ERROR:     answer = "ERROR";     break;
     }
     return answer;
 }

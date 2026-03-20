@@ -35,6 +35,8 @@ naddr_ipv4 ln_ipv4(const char *ip, uint16_t port);
 naddr_ipv6 ln_ipv6(const char *ip, uint16_t port);
 naddr_t ln_make4(naddr_ipv4 ipv4);
 naddr_t ln_make6(naddr_ipv6 ipv6);
+naddr_t ln_uniq(const char *uni_addr, unsigned short port);
+int ln_uni(const char *uni_addr, unsigned short port, naddr_t *out);
 
 // NOTICE: port IS NOT set (== 0) after operation
 int ln_resolve(const char *domain, naddr_t *output);
@@ -42,7 +44,7 @@ int ln_resolve(const char *domain, naddr_t *output);
 // NOTICE: fd IS NOT set (== -1), only address
 int ln_netfd(naddr_t *addr, nnet_fd *out);
 
-naddr_t  ln_nfd2addr(nnet_fd *fd);
+naddr_t  ln_nfd2addr(const nnet_fd *fd);
 nnet_fd  ln_netfdq(naddr_t *addr);
 naddr_t  ln_resolveq(const char *domain, unsigned port);
 

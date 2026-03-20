@@ -67,7 +67,7 @@ int main(){
     printf("Current NAT type: %s\n", strnattype(nt));
     printf("My address: %s:%u:%u\n", intr.sock.addr.ip.v4.ip, intr.sock.addr.ip.v4.port, intr.rudp_disp.self_uid);
 
-    soter2_intr_stateconn(&intr, ln_make4(ln_ipv4("127.0.0.1", 9000)), 2);
+    soter2_intr_stateconn(&intr, ln_uniq("127.0.0.1", 9000), 2);
 
     if (0 > soter2_intr_run(&intr)){
         fprintf(stderr, "[main] failed to run interface\n");

@@ -39,6 +39,51 @@ naddr_t ln_make6(naddr_ipv6 ipv6){
     };
 }
 
+// 1.2.3.4 -> ln_make4(ln_ipv4(ip, port))
+// abcd::0efg:1234 -> ln_make6(ln_ipv6(ip, port))
+// abcd.com -> ln_resolve(addr, port)
+int ln_uni(const char *uni_addr, unsigned short port, naddr_t *out){
+    if (!uni_addr || !out) return -1;
+    
+    struct in_addr test4;
+    if (inet_pton(AF_INET, uni_addr, &test4) == 1) {
+        out->t = nADDR_IPV4;
+        strncpy(out->ip.v4.ip, uni_addr, sizeof(out->ip.v4.ip) - 1);
+        out->ip.v4.ip[sizeof(out->ip.v4.ip) - 1] = '\0';
+        out->ip.v4.port = port;
+        return 0;
+    }
+
+    struct in6_addr test6;
+    if (inet_pton(AF_INET6, uni_addr, &test6) == 1) {
+        out->t = nADDR_IPV6;
+        strncpy(out->ip.v6.ip, uni_addr, sizeof(out->ip.v6.ip) - 1);
+        out->ip.v6.ip[sizeof(out->ip.v6.ip) - 1] = '\0';
+        out->ip.v6.port = port;
+        return 0;
+    }
+
+    if (ln_resolve(uni_addr, out) == 0) {
+        if (out->t == nADDR_IPV4) {
+            out->ip.v4.port = port;
+        } else if (out->t == nADDR_IPV6) {
+            out->ip.v6.port = port;
+        }
+        return 0;
+    }
+
+    return -1;
+}
+
+naddr_t ln_uniq(const char *uni_addr, unsigned short port){
+    if (!uni_addr) return (naddr_t){0};
+    
+    naddr_t out;
+    if (0 > ln_uni(uni_addr, port, &out)) return (naddr_t){0};
+    return out;
+}
+
+
 bool ln_addrcmp(naddr_t *a, naddr_t *b){
     if (a->t != b->t) return false;
     if (a->t == nADDR_IPV4){
@@ -56,7 +101,7 @@ int ln_resolve(const char *domain, naddr_t *output){
          
     if ( (he = gethostbyname( domain ) ) == NULL) {
         herror("gethostbyname");
-        return 1;
+        return -1;
     }
  
     addr_list = (struct in_addr **) he->h_addr_list;
@@ -119,15 +164,17 @@ int ln_netfd(naddr_t *addr, nnet_fd *out){
 
 naddr_t ln_resolveq(const char *domain, unsigned int port){
     naddr_t addr;
-    ln_resolve(domain, &addr);
+    if (0 > ln_resolve(domain, &addr)) 
+        return (naddr_t){0};
+
     addr.ip.v4.port = port;
     return addr;
 }
 
-naddr_t ln_nfd2addr(nnet_fd *fd){
+naddr_t ln_nfd2addr(const nnet_fd *fd){
     static char str[INET6_ADDRSTRLEN];
     
-    struct sockaddr_storage *addr = &fd->addr;
+    const struct sockaddr_storage *addr = &fd->addr;
 
     if (addr->ss_family == AF_INET) {
         struct sockaddr_in *ipv4 = (struct sockaddr_in *)addr;
@@ -151,13 +198,13 @@ naddr_t ln_nfd2addr(nnet_fd *fd){
 nnet_fd ln_netfdq(naddr_t *addr){
     nnet_fd out;
     memset(&out, 0, sizeof(out));
-    ln_netfd(addr, &out);
+    if (0 > ln_netfd(addr, &out)) return (nnet_fd){.rfd = -1, .addr = {0}, .addr_len = 0};
     return out;
 }
 
 naddr_t ln_domain(const char *domain, unsigned port){
     naddr_t output;
-    ln_resolve(domain, &output);
+    if (0 > ln_resolve(domain, &output)) return (naddr_t){0};
     if (output.t == nADDR_IPV4)
         output.ip.v4.port = port;
     else 

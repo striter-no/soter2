@@ -93,7 +93,7 @@ int soter2_isend       (rudp_connection *conn, void *data, size_t dsize);
 
 float    soter2_get_DPS  (soter2_interface *intr);
 void     soter2_punch    (app_context ctx, app_peer_info peer);
-nat_type soter2_intr_STUN(soter2_interface *intr, naddr_t stun1, naddr_t stun2);
+nat_type soter2_intr_STUN(soter2_interface *intr, stun_addr *stuns, size_t stuns_n);
 bool     soter2_irunning(soter2_interface *intr);
 
 #endif
