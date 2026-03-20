@@ -22,7 +22,7 @@ void state_sys_end (state_system *sys){
 int state_sys_new_ans(state_system *sys, state_request *req){
     if (!sys || !req) return -1;
 
-    prot_queue_push(&sys->new_state_ans, req);
+    prot_queue_upush(&sys->new_state_ans, req);
     mt_evsock_notify(&sys->new_state_fd);
     return 0;
 }

@@ -22,7 +22,7 @@ int main(void){
     printf("Current NAT type: %s\n", strnattype(nt));
     printf("My address: %s:%u:%u\n", ln_gip(&intr.sock.addr), ln_gport(&intr.sock.addr), intr.rudp_disp.self_uid);
 
-    int st_UID1 = soter2_intr_stateconn(&intr, ln_uniq("127.0.0.1", 9000), 2);
+    soter2_intr_stateconn(&intr, ln_uniq("127.0.0.1", 9000), 1);
     // int st_UID2 = soter2_intr_stateconn(&intr, ln_uniq("192.168.1.5", 9001), 2);
 
     if (0 > soter2_intr_run(&intr)){
@@ -30,31 +30,37 @@ int main(void){
         return -1;
     }
 
-    state_request req;
-    printf("[main] waiting for new client\n");
-    soter2_intr_wait_state(&intr, -1, &req);
-    printf("[main] got new client\n");
+    printf("[main] waiting for client\n");    
+    rudp_connection *conn;
+    if (0 > soter2_intr_wait_conn(&intr, &conn, -1)){
+        fprintf(stderr, "[main] failed to get new connection\n");
+        return -1;
+    }
 
-    peer_info info;
-    rudp_connection *conn = NULL;
-    soter2_iconnect(&intr, req.addr, req.uid);
-    soter2_istatewait(&intr, req.uid, PEER_ST_ACTIVE, &info);
-    
-    soter2_intr_statestop(&intr, st_UID1);
-    // soter2_intr_statestop(&intr, st_UID2);
-    soter2_inew_conn(&intr, &conn, &info.nfd, req.uid);
+    peer_info inf;
+    peers_db_get(&intr.pdb, conn->c_uid, &inf);
+    printf("[main] got RUDP connection\n");
+
+    // soter2_iget_conn(&intr, &conn, UINT32_MAX);
 
     printf("[main] e2ee wrapping...\n");
     e2ee_connection econn;
-    soter2_e2ee_wrap(&intr, conn, &econn, req.pubkey);
-    soter2_e2ee_handshake(&econn);
-    soter2_e2ee_end_handshake(&econn, -1);
+    soter2_e2ee_wrap(&intr, conn, &econn, inf.pubkey);
+    
+    if (0 > soter2_e2ee_handshake(&econn)){
+        fprintf(stderr, "[main] failed to send e2ee handshake\n"); 
+        return -1;
+    }
+    
+    if (0 > soter2_e2ee_end_handshake(&econn, -1)){
+        fprintf(stderr, "[main] failed to end e2ee handshake\n"); 
+        return -1;
+    }
 
     // raw_transport(&intr, conn);
     e2ee_transport(&intr, &econn);
 
-    rudp_close_conncetion(&intr.rudp_disp, info.UID);
-    free(conn);
+    rudp_close_conncetion(&intr.rudp_disp, conn->c_uid);
 
     soter2_intr_end(&intr);
 }

@@ -202,6 +202,7 @@ gossip_entry *gossip_create_entry(
     out->addr = convert_hton ? ln_hton(addr): *addr;
     out->mtd_size = mtd_size;
 
-    memcpy(out->metadata, metadata, mtd_size);
+    if (mtd_size != 0 && metadata)
+        memcpy(out->metadata, metadata, mtd_size);
     return out;
 }

@@ -234,7 +234,7 @@ int peers_db_wait(peers_db *db, uint32_t UID, peer_state state, peer_info *info)
         }
         prot_table_unlock(&db->data);
 
-        if (found) return 0; 
+        if (found) return 0;
     }
 }
 

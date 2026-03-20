@@ -123,7 +123,6 @@ int soter2_hnd_STATE (protopack *pck, const nnet_fd *nfd, pvd_sender *s, void *_
         return -1;
     }
 
-    printf("[hnd][state] new peer: %u\n", req.uid);
     state_sys_new_ans(ctx->ssytem, &req);
     return 0;
 }

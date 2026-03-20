@@ -2,6 +2,7 @@
 #include <multithr/events.h>
 #include <multithr/time.h>
 #include <lownet/core.h>
+#include <crypto/system.h>
 #include <stdint.h>
 
 #ifndef PEER_SYSTEM_PEERDB_H
@@ -18,6 +19,7 @@ typedef struct {
     peer_state state;
     uint32_t   UID;
     uint32_t   last_seen;
+    unsigned char pubkey[CRYPTO_PUBKEY_BYTES];
     
     nnet_fd    nfd;
     void      *ctx;

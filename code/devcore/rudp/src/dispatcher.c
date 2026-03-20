@@ -105,6 +105,20 @@ int rudp_get_connection(
 ){
     if (!disp || !conn) return -1;
 
+    if (UID == UINT32_MAX){
+        prot_table_lock(&disp->connections);
+        size_t inx = rand() % disp->connections.table.array.len;
+
+        dyn_pair *pair = dyn_array_at(&disp->connections.table.array, inx);
+        if (!pair) return -1;
+
+        *conn = *((rudp_connection**)pair->second);
+        prot_table_unlock(&disp->connections);
+
+        if (!(*conn)) return -1;
+        return 0;
+    }
+
     rudp_connection **ptr = prot_table_get(&disp->connections, &UID);
     if (!ptr || !(*ptr)) return -1;
 

@@ -1,3 +1,4 @@
+#include "rudp/_modules.h"
 #include <soter2/interface.h>
 #include <multithr/time.h>
 #include <pthread.h>
@@ -27,11 +28,17 @@ int soter2_intr_init(
     if (0 > state_sys_init(&intr->ssyst)) return -1;
     if (0 > rele_dispatcher_new(&intr->rele_disp, &intr->sender, UID)) return -1;
 
-    if (0 > mt_evsock_new(&intr->state_ev)) return -1;
+    if (0 > mt_evsock_new(&intr->_new_active_conn)) return -1;
+
     if (0 > prot_queue_create(sizeof(state_request), &intr->state_peers)) return -1;
     if (0 > prot_table_create(
         sizeof(int), sizeof(soter2_state_intr), 
         DYN_OWN_BOTH, &intr->state_servs
+    )) return -1;
+
+    if (0 > prot_table_create(
+        sizeof(uint32_t), sizeof(rudp_connection*), 
+        DYN_OWN_BOTH, &intr->_active_conns
     )) return -1;
 
     intr->ctx = (app_context){
@@ -55,6 +62,9 @@ int soter2_intr_init(
     intr->packet_rate = 0.f;
     intr->packets_translated = 0;
     intr->state_last_called = 0;
+
+    intr->stating_daemon = 0;
+    intr->iter_daemon = 0;
 
     atomic_store(&intr->is_running, false);
     pthread_mutex_init(&intr->rate_mtx, NULL);
@@ -99,6 +109,7 @@ void soter2_intr_end(soter2_interface *intr){
 
     atomic_store(&intr->is_running, false);
     pthread_join(intr->iter_daemon, NULL);
+    pthread_join(intr->stating_daemon, NULL);
     
     watcher_end(&intr->wtch);
     rudp_dispatcher_end(&intr->rudp_disp);
@@ -111,9 +122,21 @@ void soter2_intr_end(soter2_interface *intr){
 
     ln_usock_close(&intr->sock);
     pthread_mutex_destroy(&intr->rate_mtx);
+
+    prot_table_lock(&intr->_active_conns);
+    for (size_t i = 0; i < intr->_active_conns.table.array.len; i++) {
+        dyn_pair *pair = (dyn_pair *)dyn_array_at(&intr->_active_conns.table.array, i);    
+        rudp_connection **conn = pair->second;
+        if (conn && (*conn)) free(*conn);
+    }
+    prot_table_unlock(&intr->_active_conns);
+    prot_table_end(&intr->_active_conns);
+
+    mt_evsock_close(&intr->_new_active_conn);
 }
 
 static void *iter_daemon(void *_args);
+static void* _state_worker(void *_args);
 int soter2_intr_run(soter2_interface *intr){
     if (!intr) return -1;
     if (0 > pvd_listener_start(&intr->listener)) 
@@ -127,6 +150,7 @@ int soter2_intr_run(soter2_interface *intr){
 
     atomic_store(&intr->is_running, true);
     pthread_create(&intr->iter_daemon, NULL, iter_daemon, intr);
+    pthread_create(&intr->stating_daemon, NULL, _state_worker, intr);
     return 0;
 }
 
@@ -182,14 +206,22 @@ int soter2_e2ee_handshake(e2ee_connection *econn){
     return e2ee_conn_handshake_init(econn);
 }
 
-void soter2_iconnect(soter2_interface *intr, naddr_t address, uint32_t UID){
-    peers_db_add(&intr->pdb, (peer_info){
+void soter2_iconnect(
+    soter2_interface *intr, 
+    naddr_t address, 
+    uint32_t UID, 
+    const unsigned char pubkey[CRYPTO_PUBKEY_BYTES]
+){
+    peer_info inf = (peer_info){
         .last_seen = mt_time_get_millis_monocoarse(),
         .UID = UID,
         .state = PEER_ST_INITED,
         .nfd = ln_netfdq(&address),
         .ctx = NULL
-    });
+    };
+    memcpy(inf.pubkey, pubkey, CRYPTO_PUBKEY_BYTES);
+    
+    peers_db_add(&intr->pdb, inf);
 
     protopack *punch_msg = proto_msg_quick(intr->rudp_disp.self_uid, UID, 0, PACK_PUNCH);
     
@@ -300,15 +332,33 @@ bool soter2_irunning(soter2_interface *intr){
 
 // -- user-connections
 
-int soter2_inew_conn(soter2_interface *intr, rudp_connection **conn, const nnet_fd *nfd, uint32_t c_uid){
-    if (!intr || !conn) return -1;
-    return rudp_est_connection(&intr->rudp_disp, conn, c_uid, nfd);
-}
-
 int soter2_iget_conn(soter2_interface *intr, rudp_connection **conn, uint32_t c_uid){
     if (!intr || !conn) return -1;
     
     return rudp_get_connection(&intr->rudp_disp, c_uid, conn);
+}
+
+int soter2_intr_wait_conn(soter2_interface *intr, rudp_connection **conn, int timeout){
+    if (!intr || !conn) return -1;
+
+    int r = mt_evsock_wait(&intr->_new_active_conn, timeout);
+    if (0 >= r) return r;
+
+    rudp_dispatcher *disp = &intr->rudp_disp;
+    prot_table_lock(&disp->connections);
+
+    dyn_pair *pair = dyn_array_at(
+        &disp->connections.table.array, 
+        disp->connections.table.array.len - 1
+    );
+    if (!pair) return -1;
+
+    *conn = *((rudp_connection**)pair->second);
+    prot_table_unlock(&disp->connections);
+
+    if (!(*conn)) return -1;
+    
+    return 1;
 }
 
 protopack *soter2_irecv (rudp_connection *conn){
@@ -348,7 +398,61 @@ float soter2_get_DPS(soter2_interface *intr){
 
 // always listen to state server
 // and automaticly make new connections
-// static int state_loop ();
+static void* _state_worker(void *_args){
+    soter2_interface *intr = _args;
+
+    while (atomic_load(&intr->is_running)){
+        int r = mt_evsock_wait(&intr->ssyst.new_state_fd, 50);
+        mt_evsock_drain(&intr->ssyst.new_state_fd);
+        
+        if (r > 0){
+            state_request req;
+            while (0 == prot_queue_pop(&intr->ssyst.new_state_ans, &req)){
+                if (peers_db_check(&intr->pdb, req.uid))
+                    continue;
+                
+                soter2_iconnect(intr, req.addr, req.uid, req.pubkey);
+                printf("[daemon] connecting to %u\n", req.uid);
+            }
+        }
+
+        // checking statuses
+        peer_info *snapshot = NULL;
+        size_t snapshot_sz = peers_db_snapshot(&intr->pdb, &snapshot);
+
+        for (size_t i = 0; i < snapshot_sz; i++){
+            peer_info info = snapshot[i];
+            if (info.state != PEER_ST_ACTIVE) continue;
+
+            rudp_connection *existing_conn = NULL;
+            if (0 == rudp_get_connection(&intr->rudp_disp, info.UID, &existing_conn)) {
+                continue; 
+            }
+
+            rudp_connection *local_conn = NULL;
+            if (0 > rudp_est_connection(&intr->rudp_disp, &local_conn, info.UID, &info.nfd)){
+                fprintf(stderr, "[daemon] failed to est connection with %u\n", info.UID);
+                continue;
+            }
+
+            if (0 > prot_table_set(
+                &intr->_active_conns,
+                &info.UID,
+                &local_conn
+            )){
+                fprintf(stderr, "[daemon] failed to set new connection: %u\n", info.UID);
+                continue;
+            }
+            mt_evsock_notify(
+                &intr->_new_active_conn
+            );
+        }
+
+        free(snapshot);
+    }
+
+    return 0;
+}
 
 static int ping_iter  (const peer_info *info, app_context *ctx);
 static int gossip_iter(const peer_info *info, app_context *ctx);
@@ -360,9 +464,9 @@ static void *iter_daemon(void *_args){
 
     while (atomic_load(&intr->is_running)){
         intr->ctx.now_ms = mt_time_get_millis_monocoarse();
-        int r = mt_evsock_wait(&intr->listener.newpack_es, 2 * 1000);
+        int r = mt_evsock_wait(&intr->listener.newpack_es, 1000);
         mt_evsock_drain(&intr->listener.newpack_es);
-        
+
         if (intr->ctx.now_ms - intr->packets_timestamp >= 1000) {
             int64_t delta_ms = intr->ctx.now_ms - intr->packets_timestamp;
 
@@ -553,7 +657,6 @@ static int gossip_iter(const peer_info *info, app_context *ctx){
     free(gossip);
     return 0;
 }
-
 
 static int relay_iter(
     const peer_info *info, 

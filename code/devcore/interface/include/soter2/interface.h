@@ -1,3 +1,4 @@
+#include "rudp/_modules.h"
 #include <soter2/modules.h>
 #include <soter2/handlers.h>
 
@@ -26,28 +27,35 @@ typedef struct {
 } soter2_state_intr;
 
 typedef struct {
+    sign self_sign;
+    
+    // -- stating
     prot_table state_servs;
     int64_t    state_last_called;
-    sign       self_sign;
 
     state_system ssyst;
     prot_queue   state_peers;
-    mt_eventsock state_ev;
 
+    // -- networking
     ln_usocket sock;
     nat_type   NAT;
 
+    // -- dispatchers and sub-systems
     rele_dispatcher rele_disp;
     rudp_dispatcher rudp_disp;
     peers_db        pdb;
     gossip_system   gsyst;
+    prot_table      _active_conns;
+    mt_eventsock    _new_active_conn;
 
     watcher         wtch;
     pvd_listener    listener;
     pvd_sender      sender;
 
+    // -- context for interface
     app_context     ctx;
     pthread_t       iter_daemon;
+    pthread_t       stating_daemon;
     atomic_bool     is_running;
 
     int64_t         packets_timestamp;
@@ -79,10 +87,16 @@ int  soter2_intr_stateconn (soter2_interface *intr, naddr_t addr, int state_req_
 int  soter2_intr_statestop (soter2_interface *intr, int state_server_UID);
 int  soter2_intr_wait_state(soter2_interface *intr, int timeout, state_request *out_req);
 
-void soter2_iconnect  (soter2_interface *intr, naddr_t address, uint32_t UID);
+void soter2_iconnect(
+    soter2_interface *intr, 
+    naddr_t address, 
+    uint32_t UID, 
+    const unsigned char pubkey[CRYPTO_PUBKEY_BYTES]
+);
+
 int  soter2_istatewait(soter2_interface *intr, uint32_t client_uid, peer_state state, peer_info *info);
 
-int soter2_inew_conn(soter2_interface *intr, rudp_connection **conn, const nnet_fd *nfd, uint32_t client_uid);
+int soter2_intr_wait_conn(soter2_interface *intr, rudp_connection **conn, int timeout);
 int soter2_iget_conn(soter2_interface *intr, rudp_connection **conn, uint32_t client_uid);
 
 int soter2_e2ee_wrap(soter2_interface *intr, rudp_connection *conn, e2ee_connection *wrapped, unsigned char other_pubkey[CRYPTO_PUBKEY_BYTES]);

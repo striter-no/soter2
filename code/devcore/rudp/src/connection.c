@@ -50,7 +50,7 @@ int rudp_conn_new(
     
     conn->ack_threshold = 2;
     conn->ack_timeout_ms = 2000;
-    conn->avg_rtt_ms = 20;
+    conn->avg_rtt_ms = 250;
     conn->packets_since_ack = 0;
     conn->last_ack_timestamp = mt_time_get_millis_monocoarse();
 
