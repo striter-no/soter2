@@ -29,6 +29,10 @@ int soter2_intr_init(
 
     if (0 > mt_evsock_new(&intr->state_ev)) return -1;
     if (0 > prot_queue_create(sizeof(state_request), &intr->state_peers)) return -1;
+    if (0 > prot_table_create(
+        sizeof(int), sizeof(soter2_state_intr), 
+        DYN_OWN_BOTH, &intr->state_servs
+    )) return -1;
 
     intr->ctx = (app_context){
         .g_syst   = &intr->gsyst,
@@ -47,13 +51,10 @@ int soter2_intr_init(
     watcher_handler_reg(&intr->wtch, PACK_GOSSIP, (watcher_handler){soter2_hnd_GOSSIP, &intr->ctx});
     watcher_handler_reg(&intr->wtch, PACK_STATE,  (watcher_handler){soter2_hnd_STATE,  &intr->ctx});
 
-    intr->state_serv   = (naddr_t){0};
-    intr->state_req_dt = 0;
-    intr->state_last_called = 0;
-
     intr->packets_timestamp = 0;
     intr->packet_rate = 0.f;
     intr->packets_translated = 0;
+    intr->state_last_called = 0;
 
     atomic_store(&intr->is_running, false);
     pthread_mutex_init(&intr->rate_mtx, NULL);
@@ -106,6 +107,7 @@ void soter2_intr_end(soter2_interface *intr){
     pvd_sender_end(&intr->sender);
     pvd_listener_end(&intr->listener);
     state_sys_end(&intr->ssyst);
+    prot_table_end(&intr->state_servs);
 
     ln_usock_close(&intr->sock);
     pthread_mutex_destroy(&intr->rate_mtx);
@@ -130,17 +132,23 @@ int soter2_intr_run(soter2_interface *intr){
 
 int soter2_intr_stateconn(soter2_interface *intr, naddr_t addr, int state_req_dt){
     if (!intr) return -1;
-    
-    intr->state_serv = addr;
-    intr->state_req_dt = state_req_dt;
+    soter2_state_intr st;
+    st.req_dt = state_req_dt;
+    st.addr = addr;
 
-    return 0;
+    int UID = abs(rand());
+    prot_table_set(&intr->state_servs, &UID, &st);
+
+    return UID;
 }
 
-int soter2_intr_statestop(soter2_interface *intr){
+int soter2_intr_statestop(soter2_interface *intr, int state_serv_UID){
     if (!intr) return -1;
 
-    intr->state_req_dt = 0;
+    soter2_state_intr *st = prot_table_get(&intr->state_servs, &state_serv_UID);
+    if (st == NULL) return -1;
+
+    st->req_dt = 0;
     return 0;
 }
 
@@ -352,7 +360,7 @@ static void *iter_daemon(void *_args){
 
     while (atomic_load(&intr->is_running)){
         intr->ctx.now_ms = mt_time_get_millis_monocoarse();
-        int r = mt_evsock_wait(&intr->listener.newpack_es, 3 * 1000);
+        int r = mt_evsock_wait(&intr->listener.newpack_es, 2 * 1000);
         mt_evsock_drain(&intr->listener.newpack_es);
         
         if (intr->ctx.now_ms - intr->packets_timestamp >= 1000) {
@@ -372,35 +380,37 @@ static void *iter_daemon(void *_args){
             intr->packets_translated = 0;
         }
 
-        if (intr->state_req_dt != 0 && (intr->ctx.now_ms - intr->state_last_called >= intr->state_req_dt * 1000)){
+        if (intr->packet_rate > SOTER_LOW_PACKET_RATE) goto skip_addt;
+        
+        if (intr->ctx.now_ms - intr->state_last_called >= 3 * 1000){
             state_iter(intr);
             intr->state_last_called = intr->ctx.now_ms;
         }
 
-        if (intr->packet_rate <= SOTER_LOW_PACKET_RATE){
-            peer_info *snapshot = NULL;
-            size_t snapshot_sz = peers_db_snapshot(&intr->pdb, &snapshot);
+        peer_info *snapshot = NULL;
+        size_t snapshot_sz = peers_db_snapshot(&intr->pdb, &snapshot);
 
+        for (size_t i = 0; i < snapshot_sz; i++){
+            peer_info info = snapshot[i];
+            if (!ping_iter(&info, &intr->ctx)) continue;
+
+            peers_db_remove(&intr->pdb, info.UID);
+        }
+
+        if (intr->ctx.now_ms - intr->gsyst.last_gossiped >= SOTER_GOSSIP_DT * 1000){
+            gossip_cleanup(&intr->gsyst);
             for (size_t i = 0; i < snapshot_sz; i++){
                 peer_info info = snapshot[i];
-                if (!ping_iter(&info, &intr->ctx)) continue;
+                if (!gossip_iter(&info, &intr->ctx)) continue;
 
                 peers_db_remove(&intr->pdb, info.UID);
             }
-
-            if (intr->ctx.now_ms - intr->gsyst.last_gossiped >= SOTER_GOSSIP_DT * 1000){
-                gossip_cleanup(&intr->gsyst);
-                for (size_t i = 0; i < snapshot_sz; i++){
-                    peer_info info = snapshot[i];
-                    if (!gossip_iter(&info, &intr->ctx)) continue;
-
-                    peers_db_remove(&intr->pdb, info.UID);
-                }
-                intr->gsyst.last_gossiped = intr->ctx.now_ms;
-            }
-
-            free(snapshot);
+            intr->gsyst.last_gossiped = intr->ctx.now_ms;
         }
+
+        free(snapshot);
+
+skip_addt:
 
         if (r == 0) continue;
         if (r < 0) {
@@ -475,8 +485,19 @@ static int state_iter(soter2_interface *intr){
 
     protopack *pack = udp_make_pack(0, intr->rudp_disp.self_uid, 0, PACK_STATE, &r, sizeof(r));
     
-    nnet_fd n = ln_netfdq(&intr->state_serv);
-    pvd_sender_send(&intr->sender, pack, &n);
+    prot_table_lock(&intr->state_servs);
+    for (size_t i = 0; i < intr->state_servs.table.array.len; i++){
+        dyn_pair *pair = dyn_array_at(&intr->state_servs.table.array, i);
+        soter2_state_intr *st = pair->second;
+
+        if (st->req_dt == 0) {
+            continue;
+        }
+
+        nnet_fd n = ln_netfdq(&st->addr);
+        pvd_sender_send(&intr->sender, pack, &n);
+    }
+    prot_table_unlock(&intr->state_servs);
     free(pack);
 
     return 0;

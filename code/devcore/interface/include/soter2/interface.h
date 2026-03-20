@@ -21,9 +21,13 @@
 #endif
 
 typedef struct {
-    naddr_t    state_serv;
-    int        state_req_dt;
-    int        state_last_called;
+    naddr_t addr;
+    int     req_dt;
+} soter2_state_intr;
+
+typedef struct {
+    prot_table state_servs;
+    int64_t    state_last_called;
     sign       self_sign;
 
     state_system ssyst;
@@ -72,7 +76,7 @@ int soter2_intr_upd_sign (soter2_interface *intr, const char *path);
 void soter2_intr_end (soter2_interface *intr);
 int  soter2_intr_run (soter2_interface *intr);
 int  soter2_intr_stateconn (soter2_interface *intr, naddr_t addr, int state_req_dt);
-int  soter2_intr_statestop (soter2_interface *intr);
+int  soter2_intr_statestop (soter2_interface *intr, int state_server_UID);
 int  soter2_intr_wait_state(soter2_interface *intr, int timeout, state_request *out_req);
 
 void soter2_iconnect  (soter2_interface *intr, naddr_t address, uint32_t UID);

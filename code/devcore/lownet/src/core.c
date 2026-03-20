@@ -47,19 +47,13 @@ int ln_uni(const char *uni_addr, unsigned short port, naddr_t *out){
     
     struct in_addr test4;
     if (inet_pton(AF_INET, uni_addr, &test4) == 1) {
-        out->t = nADDR_IPV4;
-        strncpy(out->ip.v4.ip, uni_addr, sizeof(out->ip.v4.ip) - 1);
-        out->ip.v4.ip[sizeof(out->ip.v4.ip) - 1] = '\0';
-        out->ip.v4.port = port;
+        *out = ln_make4(ln_ipv4(uni_addr, port));
         return 0;
     }
 
     struct in6_addr test6;
     if (inet_pton(AF_INET6, uni_addr, &test6) == 1) {
-        out->t = nADDR_IPV6;
-        strncpy(out->ip.v6.ip, uni_addr, sizeof(out->ip.v6.ip) - 1);
-        out->ip.v6.ip[sizeof(out->ip.v6.ip) - 1] = '\0';
-        out->ip.v6.port = port;
+        *out = ln_make6(ln_ipv6(uni_addr, port));
         return 0;
     }
 
