@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <unistd.h>
 
-peer_info input_pinfo(const char *prompt, peer_relay_state rst){
+peer_info input_pinfo(const char *prompt){
     printf("%s", prompt); fflush(stdin);
 
     char ip[INET_ADDRSTRLEN]; 
@@ -21,7 +21,6 @@ peer_info input_pinfo(const char *prompt, peer_relay_state rst){
         .UID       = uid,
         .last_seen = mt_time_get_millis_monocoarse(),
         .ctx       = NULL,
-        .relay_st  = rst,
         .nfd       = ln_netfdq(&addr)
     };
     memcpy(info.pubkey, pubkey, CRYPTO_PUBKEY_BYTES);
@@ -81,7 +80,15 @@ int main(int argc, char *argv[]){
         {"stun.ekiga.net", 3478}
     };
 
-    nat_type nt = soter2_intr_STUN(&intr,  addresses, sizeof(addresses) / sizeof(addresses[0]));
+    nat_type nt = NAT_ERROR;
+    for (int i = 0; i < 5 && nt == NAT_ERROR; i++){
+        nt = soter2_intr_STUN(&intr,  addresses, sizeof(addresses) / sizeof(addresses[0]));
+        if (nt == NAT_ERROR) sleep(2);
+    }
+    if (nt == NAT_ERROR) {
+        printf("Failed to get NAT type");
+        return -1;
+    }
 
     printf("[main] current NAT type: %s\n", strnattype(nt));
     for (int i = 2; i < argc; i++){
