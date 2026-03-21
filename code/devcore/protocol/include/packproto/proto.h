@@ -15,7 +15,9 @@ typedef enum {
     PACK_STATE,     // no RUDP
     PACK_RACK,      // RUDP ACK
     PACK_FIN,       // RUDP FIN
-    PACK_RELAYED,   // no RUDP (network layer, a.k.a UDP over P2P net)
+    PACK_RAW_UDP,   // no RUDP (default handler NULL)
+    PACK_NULL,      // reserved to RELAY and other non-data packets
+    PACK_TURN,      // TURN layer
     __PROTOPACK_END
 } protopack_type;
 

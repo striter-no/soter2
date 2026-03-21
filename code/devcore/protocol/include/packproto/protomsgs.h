@@ -24,5 +24,11 @@ protopack *proto_msg_relay(
     uint32_t   relay_uid
 );
 
+protopack *proto_punch_msg(
+    uint32_t hash_from,
+    uint32_t hash_to,
+    unsigned char info[89]
+);
+
 #endif
 #define PROTO_PACKPROTO_MSGS

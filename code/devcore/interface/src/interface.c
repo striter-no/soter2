@@ -26,7 +26,7 @@ int soter2_intr_init(
     if (0 > gossip_system_init(&intr->gsyst, UID)) return -1;
 
     if (0 > state_sys_init(&intr->ssyst)) return -1;
-    if (0 > rele_dispatcher_new(&intr->rele_disp, &intr->sender, UID)) return -1;
+    if (0 > rele_dispatcher_new(&intr->rele_disp, &intr->pdb, &intr->sender, UID)) return -1;
 
     if (0 > mt_evsock_new(&intr->_new_active_conn)) return -1;
     if (0 > prot_table_create(
@@ -69,6 +69,10 @@ int soter2_intr_init(
     return 0;
 }
 
+const char *soter2_fingerprint(soter2_interface *intr){
+    return crypto_fingerprint(intr->self_sign.id_pub);
+}
+
 int soter2_intr_save_sign(soter2_interface *intr, const char *path){
     if (0 > sign_store(&intr->self_sign, path)) 
         return -1;
@@ -94,12 +98,13 @@ int soter2_intr_upd_sign(soter2_interface *intr, const char *path){
 }
 
 void soter2_intr_reset_handlers(soter2_interface *intr, soter2_ivtable vt){
-    if(vt.ACK.foo)    watcher_handler_reg(&intr->wtch, PACK_ACK,    (watcher_handler){vt.ACK.foo,    vt.ACK.ctx    });
-    if(vt.PUNCH.foo)  watcher_handler_reg(&intr->wtch, PACK_PUNCH,  (watcher_handler){vt.PUNCH.foo,  vt.PUNCH.ctx  });
-    if(vt.PING.foo)   watcher_handler_reg(&intr->wtch, PACK_PING,   (watcher_handler){vt.PING.foo,   vt.PING.ctx   });
-    if(vt.PONG.foo)   watcher_handler_reg(&intr->wtch, PACK_PONG,   (watcher_handler){vt.PONG.foo,   vt.PONG.ctx   });
-    if(vt.GOSSIP.foo) watcher_handler_reg(&intr->wtch, PACK_GOSSIP, (watcher_handler){vt.GOSSIP.foo, vt.GOSSIP.ctx });
-    if(vt.STATE.foo)  watcher_handler_reg(&intr->wtch, PACK_STATE,  (watcher_handler){vt.STATE.foo,  vt.STATE.ctx  });
+    if(vt.ACK.foo)     watcher_handler_reg(&intr->wtch, PACK_ACK,    (watcher_handler){vt.ACK.foo,        vt.ACK.ctx    });
+    if(vt.PUNCH.foo)   watcher_handler_reg(&intr->wtch, PACK_PUNCH,  (watcher_handler){vt.PUNCH.foo,      vt.PUNCH.ctx  });
+    if(vt.PING.foo)    watcher_handler_reg(&intr->wtch, PACK_PING,   (watcher_handler){vt.PING.foo,       vt.PING.ctx   });
+    if(vt.PONG.foo)    watcher_handler_reg(&intr->wtch, PACK_PONG,   (watcher_handler){vt.PONG.foo,       vt.PONG.ctx   });
+    if(vt.GOSSIP.foo)  watcher_handler_reg(&intr->wtch, PACK_GOSSIP, (watcher_handler){vt.GOSSIP.foo,     vt.GOSSIP.ctx });
+    if(vt.STATE.foo)   watcher_handler_reg(&intr->wtch, PACK_STATE,  (watcher_handler){vt.STATE.foo,      vt.STATE.ctx  });
+    if(vt.RAW_UDP.foo) watcher_handler_reg(&intr->wtch, PACK_RAW_UDP,  (watcher_handler){vt.RAW_UDP.foo,  vt.RAW_UDP.ctx  });
 }
 
 void soter2_intr_end(soter2_interface *intr){
@@ -200,20 +205,27 @@ void soter2_iconnect(
     soter2_interface *intr, 
     naddr_t address, 
     uint32_t UID, 
-    const unsigned char pubkey[CRYPTO_PUBKEY_BYTES]
+    const unsigned char pubkey[CRYPTO_PUBKEY_BYTES],
+    peer_relay_state relay_st
 ){
     peer_info inf = (peer_info){
         .last_seen = mt_time_get_millis_monocoarse(),
         .UID = UID,
         .state = PEER_ST_INITED,
         .nfd = ln_netfdq(&address),
-        .ctx = NULL
+        .ctx = NULL,
+        .relay_st = relay_st
     };
     memcpy(inf.pubkey, pubkey, CRYPTO_PUBKEY_BYTES);
     
     peers_db_add(&intr->pdb, inf);
 
-    protopack *punch_msg = proto_msg_quick(intr->rudp_disp.self_uid, UID, 0, PACK_PUNCH);
+    light_peer_info linfo = {0};
+    linfo.addr = intr->sock.addr;
+    linfo.UID  = intr->rudp_disp.self_uid;
+    memcpy(linfo.pubkey, intr->self_sign.id_pub, CRYPTO_PUBKEY_BYTES);
+
+    protopack *punch_msg = proto_punch_msg(intr->rudp_disp.self_uid, UID, (unsigned char*)&linfo);
     
     nnet_fd nfd = ln_netfdq(&address);
     pvd_sender_send(&intr->sender, punch_msg, &nfd);
@@ -351,6 +363,23 @@ int soter2_intr_wait_conn(soter2_interface *intr, rudp_connection **conn, int ti
     return 1;
 }
 
+int soter2_intr_wait_connspec(soter2_interface *intr, rudp_connection **conn, uint32_t UID){
+    if (!intr || !conn) return -1;
+
+    rudp_dispatcher *disp = &intr->rudp_disp;
+    while (atomic_load(&intr->is_running)){
+        int r = mt_evsock_wait(&intr->_new_active_conn, 500);
+        if (0 >= r) return r;
+
+        rudp_connection** ptr = prot_table_get(&disp->connections, &UID);
+        if (!ptr || !(*ptr)) continue;
+        
+        *conn = *ptr;
+    }
+    
+    return 1;
+}
+
 protopack *soter2_irecv (rudp_connection *conn){
     protopack *r = NULL;
     rudp_conn_recv(conn, &r);
@@ -361,11 +390,15 @@ int soter2_isend_r(rudp_connection *conn, protopack *p){
     return rudp_conn_send(conn, p);
 }
 
-int soter2_isend(rudp_connection *conn, void *data, size_t dsize){
+int soter2_isend(soter2_interface *intr, rudp_connection *conn, void *data, size_t dsize){
     if (!conn || conn->closed) return -1;
+    (void)intr;
     
     protopack *p = udp_make_pack(
-        0, conn->s_uid, conn->c_uid, PACK_DATA, data, dsize
+        conn->current_seq,
+        conn->s_uid, conn->c_uid,
+        PACK_DATA,
+        data, dsize
     );
 
     int r = rudp_conn_send(conn, p);
@@ -418,7 +451,7 @@ static void* _state_worker(void *_args){
                 if (peers_db_check(&intr->pdb, req.uid))
                     continue;
                 
-                soter2_iconnect(intr, req.addr, req.uid, req.pubkey);
+                soter2_iconnect(intr, req.addr, req.uid, req.pubkey, PEER_RE_STRAIGHT);
                 printf("[daemon] connecting to %u\n", req.uid);
             }
         }
@@ -532,53 +565,15 @@ skip_addt:
         listener_packet pkt;
         while (0 == pvd_next_packet(&intr->listener, &pkt)){
             
-            protopack_type ptype     = pkt.pack->packtype;
-            uint32_t       relay_to  = pkt.pack->h_to;
-            nnet_fd        relay_nfd = pkt.from_who; 
-
-            protopack *unpacked = NULL;
-            if (1 == rele_unpack(&intr->rele_disp, pkt.pack, &unpacked)){
-                unpacked = pkt.pack;
-            } else free(pkt.pack);
-
-            if (ptype == PACK_RELAYED){
-                
-                // relayed to us
-                if (relay_to == intr->rudp_disp.self_uid)
-                    goto pack_processing;
-
-                // otherwise relay forward
-
-                // firstly check, if I know this UID
-                peer_info addresant;
-                if (0 == peers_db_get(&intr->pdb, relay_to, &addresant)){
-                    rele_forward(&intr->rele_disp, unpacked, relay_to, &relay_nfd);
-                    free(unpacked);
-                    continue;
-                }
-
-                // if not, iterate by all peers database
-                peer_info *snapshot = NULL;
-                size_t snapshot_sz = peers_db_snapshot(&intr->pdb, &snapshot);
-                for (size_t i = 0; i < snapshot_sz; i++){
-                    peer_info info = snapshot[i];
-                    if (!relay_iter(&info, unpacked, &intr->rele_disp)) continue;
-
-                    peers_db_remove(&intr->pdb, info.UID);
-                }
-
-                free(snapshot);
-                free(unpacked);
-                continue;
-            }
-            
-pack_processing:
-            if (udp_is_RUDP_req(unpacked->packtype)){
-                rudp_dispatcher_pass(&intr->rudp_disp, unpacked);
-                intr->packets_translated++;
+            if (udp_is_RUDP_req(pkt.pack->packtype)){
+                printf("[intr] rudp pkt from %u\n", pkt.pack->h_from);
+                rudp_dispatcher_pass(&intr->rudp_disp, pkt.pack);
             } else {
-                watcher_pass(&intr->wtch, unpacked, &pkt.from_who);
+                proto_print(pkt.pack, 1);
+                watcher_pass(&intr->wtch, pkt.pack, &pkt.from_who);
             }
+            intr->packets_translated++;
+            peers_db_utime(&intr->pdb, pkt.pack->h_from);
         }
     }
 
@@ -667,10 +662,11 @@ static int gossip_iter(const peer_info *info, app_context *ctx){
     return 0;
 }
 
-static int relay_iter(
-    const peer_info *info, 
-    protopack       *unpacked, 
-    rele_dispatcher *disp
-){
-    return rele_forward(disp, unpacked, info->UID, &info->nfd);
-}
+// static int relay_iter(
+//     const peer_info *info, 
+//     protopack       *unpacked, 
+//     rele_dispatcher *disp
+// ){
+//     // if (unpacked->)
+//     return rele_forward(disp, unpacked, info->UID, &info->nfd, true);
+// }

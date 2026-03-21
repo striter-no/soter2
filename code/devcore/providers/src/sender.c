@@ -16,7 +16,15 @@ int pvd_sender_new(pvd_sender *s, ln_usocket *p_usocket){
     s->daemon  = 0;
     prot_queue_create(sizeof(pvd_sender_pack_t), &s->packets);
     atomic_store(&s->is_running, false);
+    s->proxy = (proxy_if){0};
 
+    return 0;
+}
+
+int pvd_sender_proxy(pvd_sender *s, proxy_if prx){
+    if (!s) return -1;
+
+    s->proxy = prx;
     return 0;
 }
 
@@ -69,13 +77,51 @@ int pvd_sender_send(pvd_sender *s, protopack *packet, const nnet_fd *to){
     };
 
     prot_queue_lock(&s->packets);
-    size_t qlen = s->packets.arr.array.len;
     _prot_queue_push_unsafe(&s->packets, &ppkt);
     prot_queue_unlock(&s->packets);
 
-    // if (qlen == 0) {
-        mt_evsock_notify(&s->newpack_es);
-    // }
+    mt_evsock_notify(&s->newpack_es);
+    return 0;
+}
+
+int _pvd_sender_low_send(pvd_sender *s, protopack *packet, const nnet_fd *to, bool no_conversion){
+    protopack *copy = udp_copy_pack(packet);
+
+    char buf[2048] = {0};
+    size_t d_size = packet->d_size;
+    size_t total_size = sizeof(protopack) + d_size;
+    ssize_t sz = total_size;
+
+    if (no_conversion){
+        sz = sizeof(protopack) + ntohl(d_size);
+        protopack_send(packet, buf);
+        
+        ln_usock_send(s->p_usocket, buf, sz, to);
+
+        free(copy);
+        return 0;
+    }
+
+    if (total_size > sizeof(buf)) {
+        fprintf(stderr, "packet too large\n");
+        free(packet);
+        return -1;
+    }
+
+    copy->seq      = htonl(packet->seq);
+    copy->d_size   = htonl(packet->d_size);
+    copy->h_from   = htonl(packet->h_from);
+    copy->h_to     = htonl(packet->h_to);
+    copy->chsum    = 0;
+
+    memcpy(buf, copy, total_size);
+
+    uint32_t csum = crc32(buf, total_size);
+    ((protopack*)buf)->chsum = htonl(csum);
+
+    // printf("[_low_send] %u seq, sz: %zu/ dsize: %u\n", packet->seq, sz, copy->d_size);
+    ln_usock_send(s->p_usocket, buf, sz, to);
+    free(copy);
     return 0;
 }
 
@@ -99,6 +145,19 @@ static void *pvd_sender_worker(void *_args){
 
             char buf[2048] = {0};
             protopack *pkt = ppkt.pack;
+            if (sender->proxy.prx){
+                proxyfied prx;
+                proxy_perform(&prx, &sender->proxy, pkt, &ppkt.to);
+
+                if (prx.drop_pkt){
+                    free(pkt);
+                    continue;
+                }
+
+                free(pkt);
+                pkt = prx.proxyfied_pkt;
+            }
+
             // proto_print(pkt, 0);
 
             size_t d_size = pkt->d_size;
@@ -123,6 +182,7 @@ static void *pvd_sender_worker(void *_args){
             ((protopack*)buf)->chsum = htonl(csum);
 
             ssize_t s = total_size;
+            // printf("[sender] sz: %zd\n", s);
             ln_usock_send(sender->p_usocket, buf, s, &ppkt.to);
 
             free(pkt);

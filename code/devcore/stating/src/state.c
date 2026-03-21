@@ -54,7 +54,8 @@ state_request state_rcreate(
     req.timestamp = htonll(mt_time_get_seconds());
     memcpy(req.pubkey, s.id_pub, CRYPTO_PUBKEY_BYTES);
 
-    uint8_t sign_buff[128] = {0};
+    printf("[state][rcr] fingerprint: %s\n", crypto_fingerprint(req.pubkey));
+    uint8_t sign_buff[sizeof(req) - CRYPTO_SIGN_BYTES] = {0};
     size_t  offset = 0;
 
     memcpy(sign_buff + offset, &req.nonce, sizeof(req.nonce)); offset += sizeof(req.nonce);
@@ -75,7 +76,7 @@ int state_rreceive(
     state_request req;
     memcpy(&req, data, sizeof(req));
     
-    uint8_t sign_buff[128] = {0};
+    uint8_t sign_buff[sizeof(req) - CRYPTO_SIGN_BYTES] = {0};
     size_t  offset = 0;
 
     memcpy(sign_buff + offset, &req.nonce, sizeof(req.nonce)); offset += sizeof(req.nonce);
@@ -85,6 +86,7 @@ int state_rreceive(
     memcpy(sign_buff + offset, &req.timestamp, sizeof(req.timestamp)); offset += sizeof(req.timestamp);
     memcpy(sign_buff + offset, req.pubkey, CRYPTO_PUBKEY_BYTES);
 
+    printf("[state] fingerprint: %s\n", crypto_fingerprint(req.pubkey));
     if (0 > sign_verify(sign_buff, sizeof(sign_buff), req.signature, req.pubkey)){
         fprintf(stderr, "[state_rx] sign verification failed\n");
         return -1;

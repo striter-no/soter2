@@ -74,6 +74,8 @@ const char *ln_gip(const naddr_t *addr){
         case nADDR_IPV4: return addr->ip.v4.ip;
         case nADDR_IPV6: return addr->ip.v6.ip;
     }
+
+    return "";
 }
 
 uint16_t ln_gport(const naddr_t *addr){
@@ -81,6 +83,8 @@ uint16_t ln_gport(const naddr_t *addr){
         case nADDR_IPV4: return addr->ip.v4.port;
         case nADDR_IPV6: return addr->ip.v6.port;
     }
+
+    return 0;
 }
 
 naddr_t ln_uniq(const char *uni_addr, unsigned short port){

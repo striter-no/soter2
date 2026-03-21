@@ -1,3 +1,4 @@
+#include "rudp/_modules.h"
 #include <soter2/handlers.h>
 
 int soter2_hnd_ACK(protopack *pck, const nnet_fd *nfd, pvd_sender *s, void *_ctx){
@@ -29,9 +30,37 @@ int soter2_hnd_PUNCH(protopack *pck, const nnet_fd *nfd, pvd_sender *s, void *_c
     app_context *ctx = _ctx;
     
     peer_info info;
-    if (0 > peers_db_get(ctx->p_db, pck->h_from, &info)){
-        fprintf(stderr, "[hnd][punch] `%u` is unknown\n", pck->h_from);
+    if (pck->h_from == ctx->rudp->self_uid){
+        fprintf(stderr, "[hnd][punch] got punch from myself, dropping\n");
         return -1;
+    }
+
+    if (0 > peers_db_get(ctx->p_db, pck->h_from, &info)){
+        printf("[hnd][punch] `%u` is unknown, adding peer\n", pck->h_from);
+
+        // in sake of stability of the network and 
+        // my neurons we add new peer if we recevie punch from unknown peer
+
+        light_peer_info linfo;
+        if (pck->d_size != sizeof(linfo)){
+            fprintf(stderr, "[hnd][punch] data size is not sizeof(light_peer_info): %u\n", pck->d_size);
+            return -1;
+        }
+
+        memcpy(&linfo, pck->data, sizeof(linfo));
+
+        naddr_t addr = linfo.addr;
+        info = (peer_info){
+            .last_seen = mt_time_get_millis_monocoarse(),
+            .UID = linfo.UID,
+            .state = PEER_ST_INITED,
+            .nfd = ln_netfdq(&addr),
+            .ctx = NULL,
+            .relay_st = PEER_RE_RELAYED
+        };
+        memcpy(info.pubkey, linfo.pubkey, CRYPTO_PUBKEY_BYTES);
+        
+        peers_db_add(ctx->p_db, info);
     }
 
     peers_db_unfd(ctx->p_db, info.UID, nfd);
@@ -66,7 +95,6 @@ int soter2_hnd_PING(protopack *pck, const nnet_fd *nfd, pvd_sender *s, void *_ct
     free(pong);
 
     if (0 > peers_db_utime(ctx->p_db, pck->h_from)){
-        printf("ping failed!\n");
         // peers_db_remove(ctx->p_db, pck->h_from);
     }
     // printf("got ping\n");

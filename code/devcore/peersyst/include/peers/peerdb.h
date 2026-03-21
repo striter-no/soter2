@@ -15,15 +15,29 @@ typedef enum {
     PEER_ST_PROTECTED
 } peer_state;
 
+typedef enum {
+    PEER_RE_UNKNOWN,
+    PEER_RE_RELAYED,
+    PEER_RE_STRAIGHT
+} peer_relay_state;
+
 typedef struct {
     peer_state state;
     uint32_t   UID;
     uint32_t   last_seen;
     unsigned char pubkey[CRYPTO_PUBKEY_BYTES];
     
+    peer_relay_state relay_st;
     nnet_fd    nfd;
     void      *ctx;
 } peer_info;
+
+typedef struct __attribute__((packed)) {
+    uint32_t UID;
+    naddr_t  addr;
+    unsigned char pubkey[CRYPTO_PUBKEY_BYTES];
+    peer_relay_state relay_st:8;
+} light_peer_info;
 
 typedef struct {
     prot_table   data;
@@ -37,6 +51,8 @@ int  peers_db_add   (peers_db *db, peer_info info);
 int  peers_db_remove(peers_db *db, uint32_t UID);
 int  peers_db_get   (peers_db *db, uint32_t UID, peer_info *info);
 
+peer_relay_state peers_db_relayst (peers_db *db, uint32_t UID);
+
 bool peers_db_check  (peers_db *db, uint32_t UID);
 bool peers_db_scheck (peers_db *db, uint32_t UID, peer_state state);
 int  peers_db_schange(peers_db *db, uint32_t UID, peer_state new_state);
@@ -48,6 +64,7 @@ int  peers_db_faddr (peers_db *db, peer_info **infos, size_t *info_sz, naddr_t  
 
 // UINT32_MAX for waiting any new updates
 int  peers_db_wait  (peers_db *db, uint32_t UID, peer_state state, peer_info *got_info);
+
 
 size_t peers_db_snapshot(peers_db *db, peer_info **out);
 

@@ -6,6 +6,8 @@
 #include <stdatomic.h>
 #include <pthread.h>
 
+#include "proxy.h"
+
 #ifndef PROVIDER_LISTENER
 
 typedef struct {
@@ -20,10 +22,13 @@ typedef struct {
 
     mt_eventsock newpack_es;
     pthread_t    daemon;
+
+    proxy_if     proxy;
 } pvd_listener;
 
-int pvd_listener_new(pvd_listener *l, ln_usocket *p_usocket);
+int  pvd_listener_new(pvd_listener *l, ln_usocket *p_usocket);
 void pvd_listener_end(pvd_listener *l);
+int  pvd_listener_proxy(pvd_listener *l, proxy_if prx);
 
 int pvd_listener_start(pvd_listener *l);
 int pvd_next_packet(pvd_listener *l, listener_packet *pkt);

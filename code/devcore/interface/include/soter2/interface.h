@@ -1,6 +1,7 @@
 #include "rudp/_modules.h"
 #include <soter2/modules.h>
 #include <soter2/handlers.h>
+#include <stdint.h>
 
 #ifndef SOTER_INTERFACE_H
 #define SOTER_INTERFACE_H
@@ -71,6 +72,7 @@ typedef struct {
     watcher_handler PONG;
     watcher_handler GOSSIP;
     watcher_handler STATE;
+    watcher_handler RAW_UDP;
 } soter2_ivtable;
 
 int  soter2_intr_init          (soter2_interface *intr);
@@ -90,24 +92,27 @@ void soter2_iconnect(
     soter2_interface *intr, 
     naddr_t address, 
     uint32_t UID, 
-    const unsigned char pubkey[CRYPTO_PUBKEY_BYTES]
+    const unsigned char pubkey[CRYPTO_PUBKEY_BYTES],
+    peer_relay_state relay_st
 );
 
 int soter2_istatewait(soter2_interface *intr, uint32_t client_uid, peer_state state, peer_info *info);
 
 int soter2_intr_wait_conn(soter2_interface *intr, rudp_connection **conn, int timeout);
+int soter2_intr_wait_connspec(soter2_interface *intr, rudp_connection **conn, uint32_t UID);
 int soter2_iget_conn(soter2_interface *intr, rudp_connection **conn, uint32_t client_uid);
 int soter2_close_conn(soter2_interface *intr, uint32_t UID);
 
 int soter2_e2ee_wrap(soter2_interface *intr, rudp_connection *conn, e2ee_connection *wrapped, unsigned char other_pubkey[CRYPTO_PUBKEY_BYTES]);
 int soter2_e2ee_handshake(e2ee_connection *econn);
 int soter2_e2ee_end_handshake(e2ee_connection *econn, int timeout);
+const char *soter2_fingerprint(soter2_interface *intr);
 
 // Returns packet owned by caller. Caller must free returned packet.
 protopack *soter2_irecv(rudp_connection *conn);
 
-int soter2_isend_r     (rudp_connection *conn, protopack *p);
-int soter2_isend       (rudp_connection *conn, void *data, size_t dsize);
+int soter2_isend_r (rudp_connection *conn, protopack *p);
+int soter2_isend   (soter2_interface *intr, rudp_connection *conn, void *data, size_t dsize);
 
 float    soter2_get_DPS  (soter2_interface *intr);
 void     soter2_punch    (app_context ctx, app_peer_info peer);

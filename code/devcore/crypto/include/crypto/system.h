@@ -5,7 +5,9 @@
 
 #ifndef CRYPTO_SYSTEM_H
 
-int crypto_init();
+int crypto_init(void);
+
+const char *crypto_fingerprint(const unsigned char pubkey[CRYPTO_PUBKEY_BYTES]);
 
 int crypto_encrypt(
     unsigned char *out_ciphertext,

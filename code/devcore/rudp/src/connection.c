@@ -112,7 +112,7 @@ void rudp_conn_close(rudp_connection *conn){ // done
 
 int rudp_conn_send(rudp_connection *conn, protopack *pkt){
     if (!conn || !pkt) return -1;
-    if (conn->closed) return ENOTCONN;
+    if (conn->closed)  return ENOTCONN;
 
     prot_array_lock(&conn->pkts_fhost);
 

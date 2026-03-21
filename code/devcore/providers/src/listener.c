@@ -11,6 +11,15 @@ int pvd_listener_new(pvd_listener *l, ln_usocket *p_usocket){
 
     l->daemon = 0;
     atomic_store(&l->is_running, false);
+    
+    l->proxy = (proxy_if){0};
+    return 0;
+}
+
+int pvd_listener_proxy(pvd_listener *l, proxy_if prx){
+    if (!l) return -1;
+
+    l->proxy = prx;
     return 0;
 }
 
@@ -61,7 +70,6 @@ static void *pvd_listener_worker(void *_args){
         if (r == 0) {continue;}
         if (r < 0)  {perror("poll()"); continue;}
 
-        
         ssize_t recved = ln_usock_recv(listener->p_usocket, buf, 2048, &from);
         
         if (recved == 0) continue;
@@ -70,11 +78,23 @@ static void *pvd_listener_worker(void *_args){
             continue;
         }
 
-        naddr_t addr = ln_nfd2addr(&from);
         protopack *pkt = protopack_recv(buf, recved);
         if (!pkt) {
             fprintf(stderr, "protopack_recv() failed\n");
             continue;
+        }
+
+        if (listener->proxy.prx){
+            proxyfied prx;
+            proxy_perform(&prx, &listener->proxy, pkt, &from);
+
+            if (prx.drop_pkt){
+                free(pkt);
+                continue;
+            }
+
+            free(pkt);
+            pkt = prx.proxyfied_pkt;
         }
         
         listener_packet lpkt = {pkt, from};

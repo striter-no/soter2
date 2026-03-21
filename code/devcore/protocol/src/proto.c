@@ -65,14 +65,15 @@ protopack *udp_make_pack(
     return pack;
 }
 
-protopack *udp_copy_pack(protopack *pk){ // bool apply_ntoh
-    protopack *out = malloc(sizeof(protopack) + pk->d_size); // apply_ntoh ? ntohl(pk->d_size): pk->d_size
-    out->chsum    = pk->chsum;  /*apply_ntoh ? ntohl(pk->chsum): pk->chsum;*/
-    out->seq      = pk->seq;    /*apply_ntoh ? ntohl(pk->seq): pk->seq;*/
-    out->d_size   = pk->d_size; /*apply_ntoh ? ntohl(pk->d_size): pk->d_size;*/
-    out->h_from   = pk->h_from; /*apply_ntoh ? ntohl(pk->h_from): pk->h_from;*/
-    out->h_to     = pk->h_to;   /*apply_ntoh ? ntohl(pk->h_to): pk->h_to;*/
+protopack *udp_copy_pack(protopack *pk){
+    protopack *out = malloc(sizeof(protopack) + pk->d_size);
+    out->chsum    = pk->chsum;
+    out->seq      = pk->seq;
+    out->d_size   = pk->d_size;
+    out->h_from   = pk->h_from;
+    out->h_to     = pk->h_to;
     out->packtype = pk->packtype;
+
     if (out->d_size != 0) memcpy(out->data, pk->data, out->d_size);
 
     return out;
@@ -130,12 +131,12 @@ void proto_print(const protopack *pack, int dir){
         } break;
 
         default: {
-            // printf(
-            //     "[protop] pkt: %s (%u bytes, %u seq)\n", 
-            //     PROTOPACK_TYPES_CHAR[pack->packtype],
-            //     pack->d_size,
-            //     pack->seq
-            // );
+            printf(
+                "[protop] pkt: %s (%u bytes, %u seq)\n", 
+                PROTOPACK_TYPES_CHAR[pack->packtype],
+                pack->d_size,
+                pack->seq
+            );
         }
     }
 }
@@ -173,14 +174,16 @@ protopack *protopack_recv(
     }
 
     protopack *final_pkt = malloc(raw_size);
-    if (final_pkt) {
-        memcpy(final_pkt, raw_data, raw_size);
-        final_pkt->chsum = htonl(received_chsum); 
-    }
+    if (!final_pkt)
+        return NULL;
 
+    memcpy(final_pkt, raw_data, raw_size);
+
+    final_pkt->chsum  = htonl(received_chsum); 
     final_pkt->seq    = ntohl(final_pkt->seq);
     final_pkt->d_size = ntohl(final_pkt->d_size);
     final_pkt->h_from = ntohl(final_pkt->h_from);
     final_pkt->h_to   = ntohl(final_pkt->h_to);
+
     return final_pkt;
 }
