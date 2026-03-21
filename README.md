@@ -28,7 +28,9 @@ sudo ./code/sodium_inst.sh
 ```sh
 git clone https://github.com/striter-no/abs
 cd abs
-make && make install // automaticly moves abs to ~/.local/bin/abs
+
+# automaticly moves abs to ~/.local/bin/abs
+make && make install 
 ```
 
 3. Than in root directory run `abs`, it will automaticly build all modules in project
