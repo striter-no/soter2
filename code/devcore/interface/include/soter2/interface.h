@@ -96,12 +96,15 @@ void soter2_iconnect(
 int soter2_istatewait(soter2_interface *intr, uint32_t client_uid, peer_state state, peer_info *info);
 
 int soter2_intr_wait_conn(soter2_interface *intr, rudp_connection **conn, int timeout);
+int soter2_intr_wait_connspec(soter2_interface *intr, rudp_connection **conn, uint32_t UID);
+
 int soter2_iget_conn(soter2_interface *intr, rudp_connection **conn, uint32_t client_uid);
 int soter2_close_conn(soter2_interface *intr, uint32_t UID);
 
 int soter2_e2ee_wrap(soter2_interface *intr, rudp_connection *conn, e2ee_connection *wrapped, unsigned char other_pubkey[CRYPTO_PUBKEY_BYTES]);
 int soter2_e2ee_handshake(e2ee_connection *econn);
 int soter2_e2ee_end_handshake(e2ee_connection *econn, int timeout);
+const char *soter2_fingerprint(soter2_interface *intr);
 
 // Returns packet owned by caller. Caller must free returned packet.
 protopack *soter2_irecv(rudp_connection *conn);

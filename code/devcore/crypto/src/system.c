@@ -6,6 +6,18 @@ int crypto_init(){
     return sodium_init();
 }
 
+const char *crypto_fingerprint(const unsigned char pubkey[CRYPTO_PUBKEY_BYTES]){
+    static char fingerprint[50];
+    snprintf(fingerprint, 50, "%02x%02x%02x%02x%02x%02x%02x%02x", 
+        pubkey[0], pubkey[1],
+        pubkey[2], pubkey[3],
+        pubkey[4], pubkey[5],
+        pubkey[6], pubkey[7]
+    );
+
+    return fingerprint;
+}
+
 int crypto_encrypt(
     unsigned char *out_ciphertext,
     const unsigned char *raw_data,

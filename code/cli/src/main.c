@@ -2,6 +2,48 @@
 #include <errno.h>
 #include <unistd.h>
 
+peer_info input_pinfo(const char *prompt){
+    printf("%s", prompt); fflush(stdin);
+
+    char ip[INET_ADDRSTRLEN]; 
+    unsigned port, uid;
+
+    char pubkey_b64[256];
+    unsigned char pubkey[CRYPTO_PUBKEY_BYTES] = {0};
+    scanf("%[^:]:%u:%s", ip, &port, pubkey_b64);
+    crypto_decode_pubkey_uid(pubkey_b64, pubkey, &uid);
+
+    naddr_t addr = ln_uniq(ip, port);
+    peer_info info = {
+        .state     = PEER_ST_INITED,
+        .UID       = uid,
+        .last_seen = mt_time_get_millis_monocoarse(),
+        .ctx       = NULL,
+        .nfd       = ln_netfdq(&addr)
+    };
+    memcpy(info.pubkey, pubkey, CRYPTO_PUBKEY_BYTES);
+    
+    return info;
+}
+
+const char* get_selfinfo(soter2_interface *intr){
+    static char output[512];
+    printf("[self] ip:port   %s:%u\n", ln_gip(&intr->sock.addr), ln_gport(&intr->sock.addr));
+    printf("[self] uid       %u\n", intr->rudp_disp.self_uid);
+    printf("[self] fingprint %s\n", soter2_fingerprint(intr));
+
+    char *b64 = crypto_encode_pubkey_uid(intr->self_sign.id_pub, intr->rudp_disp.self_uid);
+    snprintf(
+        output, 512, "%s:%u:%s", 
+        ln_gip(&intr->sock.addr), 
+        ln_gport(&intr->sock.addr),
+        b64
+    );
+
+    free(b64);
+    return output;
+}
+
 static void e2ee_transport(soter2_interface *intr, e2ee_connection *conn);
 int main(void){
     srand(mt_time_get_seconds_monocoarse());
@@ -17,7 +59,15 @@ int main(void){
         {"stun.ekiga.net", 3478}
     };
 
-    nat_type nt = soter2_intr_STUN(&intr,  addresses, sizeof(addresses) / sizeof(addresses[0]));
+    nat_type nt = NAT_ERROR;
+    for (int i = 0; i < 5 && nt == NAT_ERROR; i++){
+        nt = soter2_intr_STUN(&intr,  addresses, sizeof(addresses) / sizeof(addresses[0]));
+        if (nt == NAT_ERROR) sleep(2);
+    }
+    if (nt == NAT_ERROR) {
+        printf("Failed to get NAT type");
+        return -1;
+    }
 
     printf("Current NAT type: %s\n", strnattype(nt));
     printf("My address: %s:%u:%u\n", ln_gip(&intr.sock.addr), ln_gport(&intr.sock.addr), intr.rudp_disp.self_uid);

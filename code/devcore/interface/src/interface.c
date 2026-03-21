@@ -351,6 +351,27 @@ int soter2_intr_wait_conn(soter2_interface *intr, rudp_connection **conn, int ti
     return 1;
 }
 
+int soter2_intr_wait_connspec(soter2_interface *intr, rudp_connection **conn, uint32_t UID){
+    if (!intr || !conn) return -1;
+
+    rudp_dispatcher *disp = &intr->rudp_disp;
+    while (atomic_load(&intr->is_running)){
+        int r = mt_evsock_wait(&intr->_new_active_conn, 500);
+        if (0 >= r) return r;
+
+        rudp_connection** ptr = prot_table_get(&disp->connections, &UID);
+        if (!ptr || !(*ptr)) continue;
+        
+        *conn = *ptr;
+    }
+    
+    return 1;
+}
+
+const char *soter2_fingerprint(soter2_interface *intr){
+    return crypto_fingerprint(intr->self_sign.id_pub);
+}
+
 protopack *soter2_irecv (rudp_connection *conn){
     protopack *r = NULL;
     rudp_conn_recv(conn, &r);
