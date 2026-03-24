@@ -21,7 +21,7 @@ int dyn_table_set(dyn_table *table, const void *key, const void *val) {
     if (!table || !key || !val) return -1;
 
     size_t idx = _dyn_table_find_idx(table, key);
-    
+
     if (idx != SIZE_MAX) {
         dyn_pair *pair = (dyn_pair *)dyn_array_at(&table->array, idx);
         if (table->flags & DYN_OWN_VAL) {
@@ -48,7 +48,7 @@ int dyn_table_set(dyn_table *table, const void *key, const void *val) {
         new_pair.second = (void *)val;
     }
 
-    if ((table->flags & DYN_OWN_KEY && !new_pair.first) || 
+    if ((table->flags & DYN_OWN_KEY && !new_pair.first) ||
         (table->flags & DYN_OWN_VAL && !new_pair.second)) {
         if (table->flags & DYN_OWN_KEY) free(new_pair.first);
         if (table->flags & DYN_OWN_VAL) free(new_pair.second);
@@ -76,6 +76,16 @@ void *dyn_table_get(dyn_table *table, const void *key){
     return ((dyn_pair*)dyn_array_at(&table->array, idx))->second;
 }
 
+dyn_pair *dyn_table_iterate(dyn_table *table, size_t *_inx){
+    if (!_inx || !table) return NULL;
+    size_t inx = *_inx;
+
+    if (inx >= table->array.len) return NULL;
+
+    *_inx = inx + 1;
+    return (dyn_pair *)dyn_array_at(&table->array, inx);
+}
+
 void dyn_table_end(dyn_table *table) {
     if (!table) return;
 
@@ -86,6 +96,6 @@ void dyn_table_end(dyn_table *table) {
             if (table->flags & DYN_OWN_VAL) free(pair->second);
         }
     }
-    
+
     dyn_array_end(&table->array);
 }

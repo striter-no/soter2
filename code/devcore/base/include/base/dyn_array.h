@@ -12,7 +12,9 @@ typedef struct {
 } dyn_array;
 
 dyn_array dyn_array_create(size_t element_size);
-size_t    dyn_array_index(dyn_array *array, const void *element);
+int       dyn_array_from_c(dyn_array *out, size_t element_size, size_t len, const void *elements);
+
+size_t dyn_array_index(dyn_array *array, const void *element);
 
 int   dyn_array_resize(dyn_array *array, size_t s);
 int   dyn_array_push(dyn_array *array, const void *element);

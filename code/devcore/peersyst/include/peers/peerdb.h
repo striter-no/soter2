@@ -26,8 +26,7 @@ typedef struct {
     uint32_t   UID;
     uint32_t   last_seen;
     unsigned char pubkey[CRYPTO_PUBKEY_BYTES];
-    
-    peer_relay_state relay_st;
+
     nnet_fd    nfd;
     void      *ctx;
 } peer_info;
@@ -36,7 +35,6 @@ typedef struct __attribute__((packed)) {
     uint32_t UID;
     naddr_t  addr;
     unsigned char pubkey[CRYPTO_PUBKEY_BYTES];
-    peer_relay_state relay_st:8;
 } light_peer_info;
 
 typedef struct {
@@ -65,6 +63,8 @@ int  peers_db_faddr (peers_db *db, peer_info **infos, size_t *info_sz, naddr_t  
 // UINT32_MAX for waiting any new updates
 int  peers_db_wait  (peers_db *db, uint32_t UID, peer_state state, peer_info *got_info);
 
+int peers_db_linfo(const peer_info *input, light_peer_info *out);
+int peers_db_reconstruct(peer_info *output, const light_peer_info *input);
 
 size_t peers_db_snapshot(peers_db *db, peer_info **out);
 

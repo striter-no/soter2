@@ -64,5 +64,8 @@ protopack *protopack_recv(
     size_t     raw_size
 );
 
+#define PROTOCOL_OVERHEAD sizeof(protopack)
+#define UDP_MTU           1432
+
 #endif
 #define PROTOCOL_PACKPROTO_H

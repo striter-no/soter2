@@ -4,7 +4,7 @@
 
 int peers_db_init(peers_db *db){
     if (!db) return -1;
-    
+
     if (0 > mt_evsock_new(&db->statchange)){
         return -1;
     }
@@ -18,7 +18,7 @@ int peers_db_init(peers_db *db){
 
 int peers_db_end(peers_db *db){
     if (!db) return -1;
-    
+
     prot_table_end(&db->data);
     mt_evsock_close(&db->statchange);
     return 0;
@@ -71,14 +71,14 @@ bool peers_db_scheck(peers_db *db, uint32_t UID, peer_state state){
     if (!db) return -1;
     peer_info info;
     if (0 > peers_db_get(db, UID, &info)) return false;
-    
+
     return info.state == state;
 }
 
 int peers_db_schange(peers_db *db, uint32_t UID, peer_state new_state){
     if (!db) return -1;
     prot_table_lock(&db->data);
-    
+
     peer_info *info = _prot_table_get_unsafe(&db->data, &UID);
     if (!info) {
         prot_table_unlock(&db->data);
@@ -94,7 +94,7 @@ int peers_db_schange(peers_db *db, uint32_t UID, peer_state new_state){
 int peers_db_unfd(peers_db *db, uint32_t UID, const nnet_fd *nfd){
     if (!db) return -1;
     prot_table_lock(&db->data);
-    
+
     peer_info *info = _prot_table_get_unsafe(&db->data, &UID);
     if (!info) {
         prot_table_unlock(&db->data);
@@ -105,7 +105,7 @@ int peers_db_unfd(peers_db *db, uint32_t UID, const nnet_fd *nfd){
     info->nfd = *nfd;
     // naddr_t addr = ln_nfd2addr(nfd);
     // printf("[peersdb][unfd] changed nfd to %s:%u\n", addr.ip.v4.ip, addr.ip.v4.port);
-    
+
     prot_table_unlock(&db->data);
     return 0;
 }
@@ -113,7 +113,7 @@ int peers_db_unfd(peers_db *db, uint32_t UID, const nnet_fd *nfd){
 int peers_db_utime(peers_db *db, uint32_t UID){
     if (!db) return -1;
     prot_table_lock(&db->data);
-    
+
     peer_info *info = _prot_table_get_unsafe(&db->data, &UID);
     if (!info) {
         prot_table_unlock(&db->data);
@@ -127,12 +127,43 @@ int peers_db_utime(peers_db *db, uint32_t UID){
     return 0;
 }
 
+// -- light info, conversions
+
+int peers_db_linfo(const peer_info *input, light_peer_info *out){
+    if (!input || !out) return -1;
+
+    memset(out, 0, sizeof(*out));
+
+    out->UID = input->UID;
+    out->addr = ln_nfd2addr(&input->nfd);
+    memcpy(out->pubkey, input->pubkey, CRYPTO_PUBKEY_BYTES);
+
+    return 0;
+}
+
+int peers_db_reconstruct(peer_info *out, const light_peer_info *input){
+    if (!input || !out) return -1;
+
+    memset(out, 0, sizeof(*out));
+
+    naddr_t addr = input->addr;
+    out->UID = input->UID;
+    out->nfd = ln_netfdq(&addr);
+    out->ctx = NULL;
+    out->last_seen = mt_time_get_millis_monocoarse();
+    out->state = PEER_ST_INITED;
+    memcpy(out->pubkey, input->pubkey, CRYPTO_PUBKEY_BYTES);
+
+    return 0;
+}
+
+
 // -- filtering
 int peers_db_fstate(peers_db *db, peer_info **infos, size_t *info_sz, peer_state state){
     if (!db || !infos || !info_sz) return -1;
-    
+
     prot_table_lock(&db->data);
-    
+
     *info_sz = 0;
     *infos = NULL;
 
@@ -174,9 +205,9 @@ int peers_db_fstate(peers_db *db, peer_info **infos, size_t *info_sz, peer_state
 
 int peers_db_faddr(peers_db *db, peer_info **infos, size_t *info_sz, naddr_t *addr){
     if (!db || !infos || !info_sz) return -1;
-    
+
     prot_table_lock(&db->data);
-    
+
     *info_sz = 0;
     *infos = NULL;
 
@@ -186,7 +217,7 @@ int peers_db_faddr(peers_db *db, peer_info **infos, size_t *info_sz, naddr_t *ad
         if (!pair) continue;
 
         peer_info *info = pair->second;
-        
+
         naddr_t n = ln_nfd2addr(&info->nfd);
         if (ln_addrcmp(addr, &n)) count++;
     }
@@ -254,7 +285,7 @@ size_t peers_db_snapshot(peers_db *db, peer_info **out){
 
     for (size_t i = 0; i < db->data.table.array.len; i++) {
         dyn_pair *pair = dyn_array_at(&db->data.table.array, i);
-        if (!pair) continue; 
+        if (!pair) continue;
 
         (*out)[o_size++] = *(peer_info*)pair->second;
     }

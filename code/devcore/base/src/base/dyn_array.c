@@ -1,13 +1,26 @@
 #include <base/dyn_array.h>
 
 dyn_array dyn_array_create(size_t element_size){
-    
+
     return (dyn_array){
         .elements = NULL,
         .element_size = element_size,
         .head = 1,
         .len  = 0
     };
+}
+
+int dyn_array_from_c(dyn_array *out, size_t element_size, size_t len, const void *elements){
+    dyn_array array = dyn_array_create(element_size);
+    if (0 > dyn_array_resize(&array, len)) {
+        dyn_array_end(&array);
+        return -1;
+    }
+
+    memcpy(array.elements, elements, len * element_size);
+    array.len = len;
+    *out = array;
+    return 0;
 }
 
 int dyn_array_push(dyn_array *array, const void *element){
@@ -21,8 +34,8 @@ int dyn_array_push(dyn_array *array, const void *element){
     }
 
     memcpy(
-        ((char*)array->elements) + array->len * array->element_size, 
-        element, 
+        ((char*)array->elements) + array->len * array->element_size,
+        element,
         array->element_size
     );
 
@@ -46,7 +59,7 @@ int dyn_array_resize(dyn_array *array, size_t s){
 size_t dyn_array_index(dyn_array *array, const void *element){
     if (!array) return SIZE_MAX;
     for (size_t i = 0; i < array->len; i++){
-        if (memcmp(element, ((char*)array->elements) + i * array->element_size, array->element_size) != 0) 
+        if (memcmp(element, ((char*)array->elements) + i * array->element_size, array->element_size) != 0)
             continue;
         return i;
     }
@@ -74,8 +87,8 @@ int dyn_array_count(dyn_array *array, const void *element){
 
     int count = 0;
     for (size_t i = 0; i < array->len; i++){
-        if (memcmp(element, 
-            ((char*)array->elements) + i * array->element_size, 
+        if (memcmp(element,
+            ((char*)array->elements) + i * array->element_size,
             array->element_size
         ) == 0)
             count++;
@@ -110,7 +123,7 @@ int dyn_array_insert(dyn_array *array, size_t index, const void *element) {
         size_t new_capacity = (array->head == 0) ? 2 : array->head * 2;
         void *n = realloc(array->elements, new_capacity * array->element_size);
         if (!n) return -1;
-        
+
         array->elements = n;
         array->head = new_capacity;
     }
@@ -137,8 +150,8 @@ typedef int (*dyn_array_cmp_t)(const void *a, const void *b);
 
 void dyn_array_sort(dyn_array *array, dyn_array_cmp_t cmp){
     if (!array || !cmp || array->len <= 1) return;
-    
-    qsort(array->elements, array->len, array->element_size, 
+
+    qsort(array->elements, array->len, array->element_size,
           (int (*)(const void*, const void*))cmp);
 }
 

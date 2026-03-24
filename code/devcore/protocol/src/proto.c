@@ -32,7 +32,7 @@ bool udp_is_RUDP_req(protopack_type type){
         case PACK_DATA: return true;
         case PACK_FIN:  return true;
         case PACK_RACK: return true;
-        
+
         default: return false;
     }
 }
@@ -47,6 +47,8 @@ protopack *udp_make_pack(
     size_t    payload_size
 ){
     size_t total_size = sizeof(protopack) + payload_size;
+    if (total_size > UDP_MTU) return NULL;
+
     protopack *pack = malloc(total_size);
     if (!pack) return NULL;
     memset(pack, 0, total_size);
@@ -57,7 +59,7 @@ protopack *udp_make_pack(
     pack->h_from = hash_from;
     pack->h_to   = hash_to;
     pack->packtype = (uint8_t)(type);
-    
+
     if (payload)
         memcpy(pack->data, payload, payload_size);
 
@@ -132,7 +134,7 @@ void proto_print(const protopack *pack, int dir){
 
         default: {
             printf(
-                "[protop] pkt: %s (%u bytes, %u seq)\n", 
+                "[protop] pkt: %s (%u bytes, %u seq)\n",
                 PROTOPACK_TYPES_CHAR[pack->packtype],
                 pack->d_size,
                 pack->seq
@@ -157,17 +159,17 @@ protopack *protopack_recv(
     const char raw_data[2048],
     size_t     raw_size
 ){
-    
+
     if (raw_size >= 2048) {fprintf(stderr, "[proto][recv]: raw_size >= 2048 (%zu)\n", raw_size); return NULL;}
     if (raw_data == NULL) {fprintf(stderr, "[proto][recv]: raw_data is NULL\n"); return NULL;}
     if (raw_size < sizeof(protopack)) {fprintf(stderr, "[proto][recv]: raw_size < sizeof(protopack) (%zu)\n", raw_size); return NULL;}
-    
+
     protopack *recv_pkt = (protopack *)raw_data;
 
     uint32_t received_chsum = ntohl(recv_pkt->chsum);
     recv_pkt->chsum = 0;
     uint32_t calculated_chsum = crc32(raw_data, raw_size);
-    
+
     if (received_chsum != calculated_chsum) {
         fprintf(stderr, "[proto][recv]: chsum missmatch (%u != %u, %u)\n", received_chsum, calculated_chsum, ntohl(received_chsum));
         return NULL;
@@ -179,7 +181,7 @@ protopack *protopack_recv(
 
     memcpy(final_pkt, raw_data, raw_size);
 
-    final_pkt->chsum  = htonl(received_chsum); 
+    final_pkt->chsum  = htonl(received_chsum);
     final_pkt->seq    = ntohl(final_pkt->seq);
     final_pkt->d_size = ntohl(final_pkt->d_size);
     final_pkt->h_from = ntohl(final_pkt->h_from);

@@ -3,7 +3,7 @@
 int prot_table_create(size_t key_size, size_t val_size, dyn_own_t flags, prot_table *table){
     if (!table) return -1;
     table->table = dyn_table_create(key_size, val_size, flags);
-    
+
     pthread_mutexattr_t attrs;
     pthread_mutexattr_init(&attrs);
     // pthread_mutexattr_settype(&attrs, PTHREAD_MUTEX_RECURSIVE);
@@ -43,10 +43,16 @@ int prot_table_remove(prot_table *table, const void *key){
     return r;
 }
 
+dyn_pair *prot_table_iterate(prot_table *table, size_t *inx){
+    pthread_mutex_lock(&table->mtx);
+    dyn_pair *r = dyn_table_iterate(&table->table, inx);
+    pthread_mutex_unlock(&table->mtx);
+    return r;
+}
+
 void prot_table_end(prot_table *table){
     pthread_mutex_lock(&table->mtx);
     dyn_table_end(&table->table);
     pthread_mutex_unlock(&table->mtx);
     pthread_mutex_destroy(&table->mtx);
 }
-

@@ -28,6 +28,7 @@ int   dyn_table_set(dyn_table *table, const void *key, const void *val);
 int   dyn_table_remove(dyn_table *table, const void *key);
 void *dyn_table_get(dyn_table *table, const void *key);
 void  dyn_table_end(dyn_table *table);
+dyn_pair *dyn_table_iterate(dyn_table *table, size_t *inx);
 
 #endif
 #define BASE_TABLE
