@@ -7,7 +7,7 @@
 peer_info input_pinfo(const char *prompt){
     printf("%s", prompt); fflush(stdin);
 
-    char ip[INET_ADDRSTRLEN]; 
+    char ip[INET_ADDRSTRLEN];
     unsigned port, uid;
 
     char pubkey_b64[256];
@@ -24,7 +24,7 @@ peer_info input_pinfo(const char *prompt){
         .nfd       = ln_netfdq(&addr)
     };
     memcpy(info.pubkey, pubkey, CRYPTO_PUBKEY_BYTES);
-    
+
     return info;
 }
 
@@ -36,8 +36,8 @@ const char* get_selfinfo(soter2_interface *intr){
 
     char *b64 = crypto_encode_pubkey_uid(intr->self_sign.id_pub, intr->rudp_disp.self_uid);
     snprintf(
-        output, 512, "%s:%u:%s", 
-        ln_gip(&intr->sock.addr), 
+        output, 512, "%s:%u:%s",
+        ln_gip(&intr->sock.addr),
         ln_gport(&intr->sock.addr),
         b64
     );
@@ -46,7 +46,7 @@ const char* get_selfinfo(soter2_interface *intr){
     return output;
 }
 
-static void e2ee_transport(soter2_interface *intr, e2ee_connection *conn);
+static void e2ee_transport(soter2_interface *intr, rudp_connection *conn, e2ee_connection *econn);
 static void raw_transport(soter2_interface *intr, rudp_connection *conn);
 int main(int argc, char *argv[]){
     bool rele_only = false;
@@ -56,7 +56,7 @@ int main(int argc, char *argv[]){
         printf("[main] entering RELE-only mode\n");
         rele_only = true;
     }
-    
+
     if (!rele_only && argc < 3){
         printf("usage: %s PATH STATE ...\n\nPATH - path to cryptographic signature\nSTATE - ip:port of state server\n", argv[0]);
         return 1;
@@ -117,7 +117,7 @@ int main(int argc, char *argv[]){
         goto end;
     }
     // peer_info info = input_pinfo("[main] input other client's info: ", PEER_RE_RELAYED);
-    
+
     // naddr_t addr = ln_nfd2addr(&info.nfd);
     // printf("[main] got client: %s:%u:%u:%s\n", ln_gip(&addr), ln_gport(&addr), info.UID, crypto_fingerprint(info.pubkey));
     // printf("[main] will try make RELE connection with %u\n", info.UID);
@@ -134,7 +134,7 @@ int main(int argc, char *argv[]){
 
     // soter2_iconnect(&intr, ln_nfd2addr(&info.nfd), info.UID, info.pubkey, PEER_RE_RELAYED);
     // soter2_istatewait(&intr, info.UID, PEER_ST_ACTIVE, &info);
-    
+
     printf("[main] waiting...\n");
     // if (0 > soter2_intr_wait_connspec(&intr, &conn, info.UID)){
     //     fprintf(stderr, "[main] failed to get RELE connection\n");
@@ -148,14 +148,14 @@ int main(int argc, char *argv[]){
     printf("[main] e2ee wrapping...\n");
     // e2ee_connection econn;
     // soter2_e2ee_wrap(&intr, conn, &econn, inf.pubkey);
-    
+
     // if (0 > soter2_e2ee_handshake(&econn)){
-    //     fprintf(stderr, "[main] failed to send e2ee handshake\n"); 
+    //     fprintf(stderr, "[main] failed to send e2ee handshake\n");
     //     return -1;
     // }
-    
+
     // if (0 > soter2_e2ee_end_handshake(&econn, -1)){
-    //     fprintf(stderr, "[main] failed to end e2ee handshake\n"); 
+    //     fprintf(stderr, "[main] failed to end e2ee handshake\n");
     //     return -1;
     // }
 
@@ -168,14 +168,18 @@ end:
     soter2_intr_end(&intr);
 }
 
-static void e2ee_transport(soter2_interface *intr, e2ee_connection *conn){
-    int i = 0;
-    while (!conn->conn->closed){
+static void e2ee_transport(soter2_interface *intr, rudp_connection *conn, e2ee_connection *econn){
+    // int i = 0;
+    for(int i = 0; i < 20;){
+    // while (!conn->closed){
         char data[200]; snprintf(data, 50, "Hello %d", i);
 
-        e2ee_send(conn, data, strlen(data));
-        
-        int w = e2ee_wait(conn, conn->conn->ack_timeout_ms);
+        unsigned char enced[UDP_MTU - PROTOCOL_OVERHEAD]; size_t enc_sz;
+        e2ee_encrypt(econn, data, strlen(data), enced, &enc_sz);
+
+        soter2_isend(intr, conn, enced, enc_sz);
+
+        int w = rudp_conn_wait(conn, conn->ack_timeout_ms);
         if (w == 0) {
             usleep(10000);
             continue;
@@ -186,9 +190,11 @@ static void e2ee_transport(soter2_interface *intr, e2ee_connection *conn){
         }
 
         protopack *r;
-        while ((r = e2ee_recv(conn)) != NULL) {
-            // if (i % 100 == 0)
-            printf("> %.*s  (gseq: %u, dps: %f)\n", r->d_size, r->data, r->seq, soter2_get_DPS(intr));
+        while ((r = soter2_irecv(conn)) != NULL) {
+            unsigned char decrypted[UDP_MTU - PROTOCOL_OVERHEAD] = {0}; size_t decsz;
+            e2ee_decrypt(econn, r->data, r->d_size, decrypted, &decsz);
+
+            printf("> %.*s  (gseq: %u, dps: %f)\n", (int)decsz, decrypted, r->seq, soter2_get_DPS(intr));
             free(r);
             i++;
         }
@@ -202,7 +208,7 @@ static void raw_transport(soter2_interface *intr, rudp_connection *conn){
         char data[200]; snprintf(data, 50, "Hello %d", i);
 
         soter2_isend(intr, conn, data, strlen(data));
-        
+
         int w = rudp_conn_wait(conn, conn->ack_timeout_ms);
         if (w == 0) {
             usleep(10000);

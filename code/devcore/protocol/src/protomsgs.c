@@ -29,11 +29,11 @@ protopack *proto_msg_quick(
 protopack *proto_punch_msg(
     uint32_t hash_from,
     uint32_t hash_to,
-    unsigned char info[89]
+    unsigned char info[88]
 ){
     return udp_make_pack(
         0, hash_from, hash_to, PACK_PUNCH,
-        info, 89
+        info, 88
     );
 }
 
@@ -44,15 +44,15 @@ protopack *proto_msg_relay(
 ){
     if (!og_packet) return NULL;
     protopack *retranslated = retranslate_udp(og_packet);
-    
+
     char buf[2048] = {0};
 
     size_t out_sz = protopack_send(retranslated, buf);
 
     printf("[msgrel] out_sz: %zu, og_size: %u, retr_size: %u\n", out_sz, og_packet->d_size, retranslated->d_size);
     protopack* out = udp_make_pack(
-        0, 
-        relay_uid, from_relay_to, 
+        0,
+        relay_uid, from_relay_to,
         PACK_NULL,
         buf, out_sz
     );

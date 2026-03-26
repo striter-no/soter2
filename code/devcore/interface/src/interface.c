@@ -15,7 +15,7 @@ int soter2_intr_init(
     intr->self_sign = sign_gen();
 
     uint32_t UID = crypto_pubkey_to_uid(intr->self_sign.id_pub);
-    
+
     if (0 > ln_usock_new(&intr->sock)) return -1;
 
     if (0 > pvd_listener_new(&intr->listener, &intr->sock)) return -1;
@@ -26,16 +26,15 @@ int soter2_intr_init(
     if (0 > gossip_system_init(&intr->gsyst, UID)) return -1;
 
     if (0 > state_sys_init(&intr->ssyst)) return -1;
-    if (0 > rele_dispatcher_new(&intr->rele_disp, &intr->pdb, &intr->sender, UID)) return -1;
 
     if (0 > mt_evsock_new(&intr->_new_active_conn)) return -1;
     if (0 > prot_table_create(
-        sizeof(int), sizeof(soter2_state_intr), 
+        sizeof(int), sizeof(soter2_state_intr),
         DYN_OWN_BOTH, &intr->state_servs
     )) return -1;
 
     if (0 > prot_table_create(
-        sizeof(uint32_t), sizeof(rudp_connection*), 
+        sizeof(uint32_t), sizeof(rudp_connection*),
         DYN_OWN_BOTH, &intr->_active_conns
     )) return -1;
 
@@ -74,15 +73,15 @@ const char *soter2_fingerprint(soter2_interface *intr){
 }
 
 int soter2_intr_save_sign(soter2_interface *intr, const char *path){
-    if (0 > sign_store(&intr->self_sign, path)) 
+    if (0 > sign_store(&intr->self_sign, path))
         return -1;
     return 0;
 }
 
 int soter2_intr_load_sign(soter2_interface *intr, const char *path){
-    if (0 > sign_load(&intr->self_sign, path)) 
+    if (0 > sign_load(&intr->self_sign, path))
         return -1;
-    
+
     intr->rudp_disp.self_uid = crypto_pubkey_to_uid(intr->self_sign.id_pub);
     intr->gsyst.self_uid = intr->rudp_disp.self_uid;
     return 0;
@@ -113,7 +112,7 @@ void soter2_intr_end(soter2_interface *intr){
     atomic_store(&intr->is_running, false);
     pthread_join(intr->iter_daemon, NULL);
     pthread_join(intr->stating_daemon, NULL);
-    
+
     watcher_end(&intr->wtch);
     rudp_dispatcher_end(&intr->rudp_disp);
     gossip_system_end(&intr->gsyst);
@@ -134,13 +133,13 @@ static void *iter_daemon(void *_args);
 static void* _state_worker(void *_args);
 int soter2_intr_run(soter2_interface *intr){
     if (!intr) return -1;
-    if (0 > pvd_listener_start(&intr->listener)) 
+    if (0 > pvd_listener_start(&intr->listener))
         return -1;
-    if (0 > pvd_sender_start(&intr->sender)) 
+    if (0 > pvd_sender_start(&intr->sender))
         return -1;
-    if (0 > watcher_start(&intr->wtch)) 
+    if (0 > watcher_start(&intr->wtch))
         return -1;
-    if (0 > rudp_dispatcher_run(&intr->rudp_disp)) 
+    if (0 > rudp_dispatcher_run(&intr->rudp_disp))
         return -1;
 
     atomic_store(&intr->is_running, true);
@@ -178,18 +177,32 @@ int soter2_intr_wait_state(soter2_interface *intr, int timeout, state_request *o
     return r;
 }
 
-int soter2_e2ee_wrap(soter2_interface *intr, rudp_connection *conn, e2ee_connection *wrapped, unsigned char other_pubkey[CRYPTO_PUBKEY_BYTES]){
-    if (!intr || !conn || !wrapped) return -1;
-    return e2ee_conn_init(wrapped, conn, intr->self_sign, other_pubkey);
+int soter2_e2ee_wrap(soter2_interface *intr, e2ee_connection *wrapped, unsigned char other_pubkey[CRYPTO_PUBKEY_BYTES]){
+    if (!intr || !wrapped) return -1;
+    return e2ee_conn_init(wrapped, intr->self_sign, other_pubkey);
 }
 
-int soter2_e2ee_end_handshake(e2ee_connection *econn, int timeout){
-    if (0 >= e2ee_conn_handshake_wait(econn, timeout)){
+int soter2_e2ee_end_handshake(rudp_connection *conn, e2ee_connection *econn, int timeout){
+    if (0 >= rudp_conn_wait(conn, timeout)){
         fprintf(stderr, "[main][e2ee] hs wait failed\n");
-        return 1;
+        return -1;
     }
 
-    if (0 > e2ee_conn_handshake_resp(econn)){
+    protopack *pkt = NULL;
+    if (0 > rudp_conn_recv(conn, &pkt)){
+        return -1;
+    }
+
+    if (sizeof(e2ee_handshake) != pkt->d_size){
+        free(pkt);
+        return -1;
+    }
+
+    unsigned char buf[sizeof(e2ee_handshake)] = {0};
+    memcpy(buf, pkt->data, pkt->d_size);
+    free(pkt);
+
+    if (0 > e2ee_conn_handshake_resp(econn, buf)){
         fprintf(stderr, "[main][e2ee] hs response failed\n");
         return -1;
     }
@@ -197,27 +210,38 @@ int soter2_e2ee_end_handshake(e2ee_connection *econn, int timeout){
     return 0;
 }
 
-int soter2_e2ee_handshake(e2ee_connection *econn){
-    return e2ee_conn_handshake_init(econn);
+int soter2_e2ee_handshake(rudp_connection *conn, e2ee_connection *econn){
+    if (!conn || !econn) return -1;
+
+    unsigned char buf[sizeof(e2ee_handshake)] = {0};
+    if (0 > e2ee_conn_handshake_init(econn, buf))
+        return -1;
+
+    protopack *hs = udp_make_pack(0, conn->s_uid, conn->c_uid, PACK_DATA, buf, sizeof(buf));
+    if (0 > rudp_conn_send(conn, hs)){
+        free(hs);
+        return -1;
+    }
+
+    free(hs);
+    return 0;
 }
 
 void soter2_iconnect(
-    soter2_interface *intr, 
-    naddr_t address, 
-    uint32_t UID, 
-    const unsigned char pubkey[CRYPTO_PUBKEY_BYTES],
-    peer_relay_state relay_st
+    soter2_interface *intr,
+    naddr_t address,
+    uint32_t UID,
+    const unsigned char pubkey[CRYPTO_PUBKEY_BYTES]
 ){
     peer_info inf = (peer_info){
         .last_seen = mt_time_get_millis_monocoarse(),
         .UID = UID,
         .state = PEER_ST_INITED,
         .nfd = ln_netfdq(&address),
-        .ctx = NULL,
-        .relay_st = relay_st
+        .ctx = NULL
     };
     memcpy(inf.pubkey, pubkey, CRYPTO_PUBKEY_BYTES);
-    
+
     peers_db_add(&intr->pdb, inf);
 
     light_peer_info linfo = {0};
@@ -226,7 +250,7 @@ void soter2_iconnect(
     memcpy(linfo.pubkey, intr->self_sign.id_pub, CRYPTO_PUBKEY_BYTES);
 
     protopack *punch_msg = proto_punch_msg(intr->rudp_disp.self_uid, UID, (unsigned char*)&linfo);
-    
+
     nnet_fd nfd = ln_netfdq(&address);
     pvd_sender_send(&intr->sender, punch_msg, &nfd);
     free(punch_msg);
@@ -298,7 +322,7 @@ nat_type soter2_intr_STUN(soter2_interface *intr, stun_addr *stuns, size_t stuns
         // first stun failed
         if (r == -2) {
             first_i++;
-            if (first_i == second_i) 
+            if (first_i == second_i)
                 first_i++;
 
             if (first_i >= len)
@@ -336,7 +360,7 @@ bool soter2_irunning(soter2_interface *intr){
 
 int soter2_iget_conn(soter2_interface *intr, rudp_connection **conn, uint32_t c_uid){
     if (!intr || !conn) return -1;
-    
+
     return rudp_get_connection(&intr->rudp_disp, c_uid, conn);
 }
 
@@ -350,7 +374,7 @@ int soter2_intr_wait_conn(soter2_interface *intr, rudp_connection **conn, int ti
     prot_table_lock(&disp->connections);
 
     dyn_pair *pair = dyn_array_at(
-        &disp->connections.table.array, 
+        &disp->connections.table.array,
         disp->connections.table.array.len - 1
     );
     if (!pair) return -1;
@@ -359,7 +383,7 @@ int soter2_intr_wait_conn(soter2_interface *intr, rudp_connection **conn, int ti
     prot_table_unlock(&disp->connections);
 
     if (!(*conn)) return -1;
-    
+
     return 1;
 }
 
@@ -373,10 +397,10 @@ int soter2_intr_wait_connspec(soter2_interface *intr, rudp_connection **conn, ui
 
         rudp_connection** ptr = prot_table_get(&disp->connections, &UID);
         if (!ptr || !(*ptr)) continue;
-        
+
         *conn = *ptr;
     }
-    
+
     return 1;
 }
 
@@ -393,7 +417,7 @@ int soter2_isend_r(rudp_connection *conn, protopack *p){
 int soter2_isend(soter2_interface *intr, rudp_connection *conn, void *data, size_t dsize){
     if (!conn || conn->closed) return -1;
     (void)intr;
-    
+
     protopack *p = udp_make_pack(
         conn->current_seq,
         conn->s_uid, conn->c_uid,
@@ -413,7 +437,7 @@ float soter2_get_DPS(soter2_interface *intr){
     pthread_mutex_lock(&intr->rate_mtx);
     float a = intr->packet_rate;
     pthread_mutex_unlock(&intr->rate_mtx);
-    
+
     return a;
 }
 
@@ -444,14 +468,14 @@ static void* _state_worker(void *_args){
     while (atomic_load(&intr->is_running)){
         int r = mt_evsock_wait(&intr->ssyst.new_state_fd, 50);
         mt_evsock_drain(&intr->ssyst.new_state_fd);
-        
+
         if (r > 0){
             state_request req;
             while (0 == prot_queue_pop(&intr->ssyst.new_state_ans, &req)){
                 if (peers_db_check(&intr->pdb, req.uid))
                     continue;
-                
-                soter2_iconnect(intr, req.addr, req.uid, req.pubkey, PEER_RE_STRAIGHT);
+
+                soter2_iconnect(intr, req.addr, req.uid, req.pubkey);
                 printf("[daemon] connecting to %u\n", req.uid);
             }
         }
@@ -466,7 +490,7 @@ static void* _state_worker(void *_args){
 
             rudp_connection *existing_conn = NULL;
             if (0 == rudp_get_connection(&intr->rudp_disp, info.UID, &existing_conn)) {
-                continue; 
+                continue;
             }
 
             rudp_connection *local_conn = NULL;
@@ -496,7 +520,6 @@ static void* _state_worker(void *_args){
 
 static int ping_iter  (const peer_info *info, soter2_interface *intr);
 static int gossip_iter(const peer_info *info, app_context *ctx);
-static int relay_iter (const peer_info *info, protopack *unpacked, rele_dispatcher *disp);
 static int state_iter (soter2_interface *intr);
 
 static void *iter_daemon(void *_args){
@@ -513,19 +536,19 @@ static void *iter_daemon(void *_args){
             pthread_mutex_lock(&intr->rate_mtx);
             if (delta_ms > 0) {
                 float delta_sec = delta_ms / 1000.0f;
-                
+
                 intr->packet_rate = (float)intr->packets_translated / delta_sec;
             } else {
                 intr->packet_rate = 0.0f;
             }
             pthread_mutex_unlock(&intr->rate_mtx);
-            
+
             intr->packets_timestamp = intr->ctx.now_ms;
             intr->packets_translated = 0;
         }
 
         if (intr->packet_rate > SOTER_LOW_PACKET_RATE) goto skip_addt;
-        
+
         if (intr->ctx.now_ms - intr->state_last_called >= 3 * 1000){
             state_iter(intr);
             intr->state_last_called = intr->ctx.now_ms;
@@ -564,7 +587,7 @@ skip_addt:
 
         listener_packet pkt;
         while (0 == pvd_next_packet(&intr->listener, &pkt)){
-            
+
             if (udp_is_RUDP_req(pkt.pack->packtype)){
                 printf("[intr] rudp pkt from %u\n", pkt.pack->h_from);
                 rudp_dispatcher_pass(&intr->rudp_disp, pkt.pack);
@@ -583,14 +606,14 @@ skip_addt:
 static int state_iter(soter2_interface *intr){
     // requesting to server
     state_request r = state_rcreate(
-        intr->sock.addr, 
-        intr->rudp_disp.self_uid, 
-        REQUEST_CONNECTION, 
+        intr->sock.addr,
+        intr->rudp_disp.self_uid,
+        REQUEST_CONNECTION,
         intr->self_sign
     );
 
     protopack *pack = udp_make_pack(0, intr->rudp_disp.self_uid, 0, PACK_STATE, &r, sizeof(r));
-    
+
     prot_table_lock(&intr->state_servs);
     for (size_t i = 0; i < intr->state_servs.table.array.len; i++){
         dyn_pair *pair = dyn_array_at(&intr->state_servs.table.array, i);
@@ -642,7 +665,7 @@ static int gossip_iter(const peer_info *info, app_context *ctx){
         // no entries
         return 0;
     }
-    
+
     size_t   packet_dsize = 0;
     uint8_t *packet_data = NULL;
     gossip_to_data(ctx->g_syst, entries, entries_c, &packet_data, &packet_dsize);
@@ -661,12 +684,3 @@ static int gossip_iter(const peer_info *info, app_context *ctx){
     free(gossip);
     return 0;
 }
-
-// static int relay_iter(
-//     const peer_info *info, 
-//     protopack       *unpacked, 
-//     rele_dispatcher *disp
-// ){
-//     // if (unpacked->)
-//     return rele_forward(disp, unpacked, info->UID, &info->nfd, true);
-// }

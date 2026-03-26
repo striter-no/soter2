@@ -15,12 +15,6 @@ typedef enum {
     PEER_ST_PROTECTED
 } peer_state;
 
-typedef enum {
-    PEER_RE_UNKNOWN,
-    PEER_RE_RELAYED,
-    PEER_RE_STRAIGHT
-} peer_relay_state;
-
 typedef struct {
     peer_state state;
     uint32_t   UID;
@@ -48,8 +42,6 @@ int peers_db_end (peers_db *db);
 int  peers_db_add   (peers_db *db, peer_info info);
 int  peers_db_remove(peers_db *db, uint32_t UID);
 int  peers_db_get   (peers_db *db, uint32_t UID, peer_info *info);
-
-peer_relay_state peers_db_relayst (peers_db *db, uint32_t UID);
 
 bool peers_db_check  (peers_db *db, uint32_t UID);
 bool peers_db_scheck (peers_db *db, uint32_t UID, peer_state state);

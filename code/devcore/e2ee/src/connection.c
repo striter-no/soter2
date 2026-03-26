@@ -82,13 +82,11 @@ int e2ee_encrypt(
         return -1;
     }
 
-    prot_array_lock(&conn->conn->pkts_fhost);
     unsigned char *ciphered = malloc(d_size + crypto_aead_chacha20poly1305_IETF_ABYTES);
 
     if (0 > crypto_encrypt(ciphered, data, d_size, &conn->tx_nonce, conn->skeys)){
         free(ciphered);
         fprintf(stderr, "[e2ee][send] failed to encrypt packet\n");
-        prot_array_unlock(&conn->conn->pkts_fhost);
         return -1;
     }
 
@@ -96,7 +94,6 @@ int e2ee_encrypt(
     *outsz = d_size + crypto_aead_chacha20poly1305_IETF_ABYTES;
     free(ciphered);
 
-    prot_array_unlock(&conn->conn->pkts_fhost);
     return 0;
 }
 

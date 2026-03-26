@@ -1,4 +1,3 @@
-#include "rudp/_modules.h"
 #include <soter2/handlers.h>
 
 int soter2_hnd_ACK(protopack *pck, const nnet_fd *nfd, pvd_sender *s, void *_ctx){
@@ -6,7 +5,7 @@ int soter2_hnd_ACK(protopack *pck, const nnet_fd *nfd, pvd_sender *s, void *_ctx
     (void)nfd;
 
     app_context *ctx = _ctx;
-    
+
     peer_info info;
     if (0 > peers_db_get(ctx->p_db, pck->h_from, &info)){
         fprintf(stderr, "[hnd][ack] `%u` is unknown\n", pck->h_from);
@@ -28,7 +27,7 @@ int soter2_hnd_PUNCH(protopack *pck, const nnet_fd *nfd, pvd_sender *s, void *_c
     if (!_ctx) return -1;
 
     app_context *ctx = _ctx;
-    
+
     peer_info info;
     if (pck->h_from == ctx->rudp->self_uid){
         fprintf(stderr, "[hnd][punch] got punch from myself, dropping\n");
@@ -38,7 +37,7 @@ int soter2_hnd_PUNCH(protopack *pck, const nnet_fd *nfd, pvd_sender *s, void *_c
     if (0 > peers_db_get(ctx->p_db, pck->h_from, &info)){
         printf("[hnd][punch] `%u` is unknown, adding peer\n", pck->h_from);
 
-        // in sake of stability of the network and 
+        // in sake of stability of the network and
         // my neurons we add new peer if we recevie punch from unknown peer
 
         light_peer_info linfo;
@@ -55,11 +54,10 @@ int soter2_hnd_PUNCH(protopack *pck, const nnet_fd *nfd, pvd_sender *s, void *_c
             .UID = linfo.UID,
             .state = PEER_ST_INITED,
             .nfd = ln_netfdq(&addr),
-            .ctx = NULL,
-            .relay_st = PEER_RE_RELAYED
+            .ctx = NULL
         };
         memcpy(info.pubkey, linfo.pubkey, CRYPTO_PUBKEY_BYTES);
-        
+
         peers_db_add(ctx->p_db, info);
     }
 
@@ -67,8 +65,8 @@ int soter2_hnd_PUNCH(protopack *pck, const nnet_fd *nfd, pvd_sender *s, void *_c
 
     if (info.state != PEER_ST_INITED && info.state != PEER_ST_NATPUNCHING){
         fprintf(
-            stderr, 
-            "[hnd][punch] check failed, `%u` state is not PEER_ST_INITED/PEER_ST_NATPUNCHING: %d\n", 
+            stderr,
+            "[hnd][punch] check failed, `%u` state is not PEER_ST_INITED/PEER_ST_NATPUNCHING: %d\n",
             pck->h_from, info.state
         );
         return -1;
@@ -87,7 +85,7 @@ int soter2_hnd_PUNCH(protopack *pck, const nnet_fd *nfd, pvd_sender *s, void *_c
 
 int soter2_hnd_PING(protopack *pck, const nnet_fd *nfd, pvd_sender *s, void *_ctx){
     app_context *ctx = _ctx;
-    
+
     protopack *pong = proto_msg_quick(
         ctx->rudp->self_uid, pck->h_from, pck->seq, PACK_PONG
     );

@@ -27,7 +27,7 @@ protopack *proto_msg_relay(
 protopack *proto_punch_msg(
     uint32_t hash_from,
     uint32_t hash_to,
-    unsigned char info[89]
+    unsigned char info[88]
 );
 
 #endif

@@ -1,4 +1,3 @@
-#include "rudp/_modules.h"
 #include <soter2/modules.h>
 #include <soter2/handlers.h>
 #include <stdint.h>
@@ -29,7 +28,7 @@ typedef struct {
 
 typedef struct {
     sign self_sign;
-    
+
     // -- stating
     prot_table state_servs;
     int64_t    state_last_called;
@@ -41,7 +40,7 @@ typedef struct {
     nat_type   NAT;
 
     // -- dispatchers and sub-systems
-    rele_dispatcher rele_disp;
+    turn_client      turn_cli;
     rudp_dispatcher rudp_disp;
     peers_db        pdb;
     gossip_system   gsyst;
@@ -89,11 +88,10 @@ int  soter2_intr_statestop (soter2_interface *intr, int state_server_UID);
 int  soter2_intr_wait_state(soter2_interface *intr, int timeout, state_request *out_req);
 
 void soter2_iconnect(
-    soter2_interface *intr, 
-    naddr_t address, 
-    uint32_t UID, 
-    const unsigned char pubkey[CRYPTO_PUBKEY_BYTES],
-    peer_relay_state relay_st
+    soter2_interface *intr,
+    naddr_t address,
+    uint32_t UID,
+    const unsigned char pubkey[CRYPTO_PUBKEY_BYTES]
 );
 
 int soter2_istatewait(soter2_interface *intr, uint32_t client_uid, peer_state state, peer_info *info);
@@ -103,9 +101,9 @@ int soter2_intr_wait_connspec(soter2_interface *intr, rudp_connection **conn, ui
 int soter2_iget_conn(soter2_interface *intr, rudp_connection **conn, uint32_t client_uid);
 int soter2_close_conn(soter2_interface *intr, uint32_t UID);
 
-int soter2_e2ee_wrap(soter2_interface *intr, rudp_connection *conn, e2ee_connection *wrapped, unsigned char other_pubkey[CRYPTO_PUBKEY_BYTES]);
-int soter2_e2ee_handshake(e2ee_connection *econn);
-int soter2_e2ee_end_handshake(e2ee_connection *econn, int timeout);
+int soter2_e2ee_wrap(soter2_interface *intr, e2ee_connection *wrapped, unsigned char other_pubkey[CRYPTO_PUBKEY_BYTES]);
+int soter2_e2ee_handshake(rudp_connection *conn, e2ee_connection *econn);
+int soter2_e2ee_end_handshake(rudp_connection *conn, e2ee_connection *econn, int timeout);
 const char *soter2_fingerprint(soter2_interface *intr);
 
 // Returns packet owned by caller. Caller must free returned packet.

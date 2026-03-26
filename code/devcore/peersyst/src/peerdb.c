@@ -58,15 +58,6 @@ bool peers_db_check(peers_db *db, uint32_t UID){
     return prot_table_get(&db->data, &UID) != NULL;
 }
 
-peer_relay_state peers_db_relayst (peers_db *db, uint32_t UID){
-    if (!db) return PEER_RE_UNKNOWN;
-
-    peer_info info;
-    if (0 > peers_db_get(db, UID, &info)) return PEER_RE_UNKNOWN;
-
-    return info.relay_st;
-}
-
 bool peers_db_scheck(peers_db *db, uint32_t UID, peer_state state){
     if (!db) return -1;
     peer_info info;
