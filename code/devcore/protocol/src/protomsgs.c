@@ -29,11 +29,11 @@ protopack *proto_msg_quick(
 protopack *proto_punch_msg(
     uint32_t hash_from,
     uint32_t hash_to,
-    unsigned char info[88]
+    unsigned char info[140]
 ){
     return udp_make_pack(
         0, hash_from, hash_to, PACK_PUNCH,
-        info, 88
+        info, 140
     );
 }
 

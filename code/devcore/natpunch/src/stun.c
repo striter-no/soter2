@@ -25,18 +25,18 @@ struct stun_attr {
 };
 
 int natp_request_stun(
-    ln_usocket *client,
+    ln_socket *client,
     naddr_t  *stun_addr
 ){
     struct stun_header req;
     req.type   = htons(STUN_BINDING_REQUEST);
     req.length = htons(0);
     req.magic  = htonl(STUN_MAGIC_COOKIE);
-    
+
     for(int i=0; i<12; i++) req.id[i] = (uint8_t)(rand() & 0xFF);
 
     nnet_fd stun_fd = ln_netfdq(stun_addr);
-    ssize_t s = sendto(client->fd.rfd, &req, sizeof(req), 0, 
+    ssize_t s = sendto(client->fd.rfd, &req, sizeof(req), 0,
                        (struct sockaddr*)&stun_fd.addr, stun_fd.addr_len);
     if (s != sizeof(req)){
         perror("sendto");
@@ -46,38 +46,38 @@ int natp_request_stun(
     uint8_t buf[1024] = {0};
     struct sockaddr_storage from;
     socklen_t from_len = sizeof(from);
-    
+
     // Проверяем результат ожидания
     int wait_r = ln_wait_netfd(&client->fd, POLLIN, 1000); // 1 сек достаточно
     if (wait_r <= 0) {
         fprintf(stderr, "[STUN] wait timeout/error (r=%d)\n", wait_r);
-        return -1; 
+        return -1;
     }
-    
-    int r = recvfrom(client->fd.rfd, buf, sizeof(buf), 0, 
+
+    int r = recvfrom(client->fd.rfd, buf, sizeof(buf), 0,
                      (struct sockaddr*)&from, &from_len);
-    
+
     if (r < 0) {
         perror("[STUN] recvfrom");
         return -1;
     }
-    
+
     if (r < (int)sizeof(struct stun_header)) {
         fprintf(stderr, "[STUN] response too small: %d bytes\n", r);
         return -1;
     }
 
     struct stun_header *res = (struct stun_header *)buf;
-    
-    // fprintf(stderr, "[STUN] type=0x%04x, magic=0x%08x\n", 
+
+    // fprintf(stderr, "[STUN] type=0x%04x, magic=0x%08x\n",
     //         ntohs(res->type), ntohl(res->magic));
-    
+
     if (ntohs(res->type) != STUN_BINDING_RESPONSE) {
         fprintf(stderr, "[STUN] wrong type: expected 0x%04x, got 0x%04x\n",
                 STUN_BINDING_RESPONSE, ntohs(res->type));
         return -1;
     }
-    
+
     if (ntohl(res->magic) != STUN_MAGIC_COOKIE) {
         fprintf(stderr, "[STUN] wrong magic cookie\n");
         return -1;
@@ -106,7 +106,7 @@ int natp_request_stun(
 
             uint16_t x_port = 0;
             uint32_t x_ip = 0;
-            
+
             memcpy(&x_port, &buf[pos + 4 + 2], 2);
             memcpy(&x_ip, &buf[pos + 4 + 4], 4);
 
@@ -115,12 +115,12 @@ int natp_request_stun(
 
             struct in_addr in;
             in.s_addr = htonl(ip);
-            
+
             // fprintf(stderr, "[STUN] XOR discovered: %s:%u\n", inet_ntoa(in), port);
             client->addr = ln_make4(ln_ipv4(inet_ntoa(in), port));
             return 0;
         }
-        
+
         if (type == ATTR_MAPPED_ADDRESS) {
             if (len < 8) {
                 fprintf(stderr, "[STUN] MAPPED_ADDR too short\n");
@@ -135,7 +135,7 @@ int natp_request_stun(
 
             uint16_t port = 0;
             uint32_t ip = 0;
-            
+
             memcpy(&port, &buf[pos + 4 + 2], 2);
             memcpy(&ip, &buf[pos + 4 + 4], 4);
 
@@ -144,7 +144,7 @@ int natp_request_stun(
 
             struct in_addr in;
             in.s_addr = htonl(real_ip);
-            
+
             // fprintf(stderr, "[STUN] MAP discovered: %s:%u\n", inet_ntoa(in), real_port);
             client->addr = ln_make4(ln_ipv4(inet_ntoa(in), real_port));
             return 0;

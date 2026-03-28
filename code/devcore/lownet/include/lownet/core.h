@@ -32,6 +32,11 @@ typedef struct {
     socklen_t               addr_len;
 } nnet_fd;
 
+typedef struct {
+    nnet_fd  fd;
+    naddr_t  addr;
+} ln_socket;
+
 naddr_ipv4 ln_ipv4(const char *ip, uint16_t port);
 naddr_ipv6 ln_ipv6(const char *ip, uint16_t port);
 naddr_t ln_make4(naddr_ipv4 ipv4);
@@ -42,10 +47,10 @@ int ln_uni(const char *uni_addr, unsigned short port, naddr_t *out);
 const char *ln_gip(const naddr_t *addr);
 uint16_t ln_gport(const naddr_t *addr);
 
-// NOTICE: port IS NOT set (== 0) after operation
+// NOTICE: port IS set to 0 after operation
 int ln_resolve(const char *domain, naddr_t *output);
 
-// NOTICE: fd IS NOT set (== -1), only address
+// NOTICE: fd IS NOT set, only address
 int ln_netfd(naddr_t *addr, nnet_fd *out);
 
 naddr_t  ln_nfd2addr(const nnet_fd *fd);

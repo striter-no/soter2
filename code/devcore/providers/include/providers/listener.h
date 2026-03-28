@@ -16,7 +16,7 @@ typedef struct {
 } listener_packet;
 
 typedef struct {
-    ln_usocket *p_usocket;
+    ln_socket *p_usocket;
     prot_queue  packets;
     atomic_bool is_running;
 
@@ -26,7 +26,7 @@ typedef struct {
     proxy_if     proxy;
 } pvd_listener;
 
-int  pvd_listener_new(pvd_listener *l, ln_usocket *p_usocket);
+int  pvd_listener_new(pvd_listener *l, ln_socket *p_usocket);
 void pvd_listener_end(pvd_listener *l);
 int  pvd_listener_proxy(pvd_listener *l, proxy_if prx);
 

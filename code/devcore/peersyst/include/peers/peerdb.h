@@ -16,6 +16,7 @@ typedef enum {
 } peer_state;
 
 typedef struct {
+    naddr_t    sserv_addr;
     peer_state state;
     uint32_t   UID;
     uint32_t   last_seen;
@@ -27,6 +28,7 @@ typedef struct {
 
 typedef struct __attribute__((packed)) {
     uint32_t UID;
+    naddr_t  sserv_addr;
     naddr_t  addr;
     unsigned char pubkey[CRYPTO_PUBKEY_BYTES];
 } light_peer_info;

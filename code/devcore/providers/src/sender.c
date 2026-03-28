@@ -5,13 +5,13 @@ struct pvd_sender_pack {
     nnet_fd    to;
 };
 
-int pvd_sender_new(pvd_sender *s, ln_usocket *p_usocket){
+int pvd_sender_new(pvd_sender *s, ln_socket *p_usocket){
     if (!s || !p_usocket) return -1;
-    
+
     if (0 > mt_evsock_new(&s->newpack_es)){
         return -1;
     }
-    
+
     s->p_usocket = p_usocket;
     s->daemon  = 0;
     prot_queue_create(sizeof(pvd_sender_pack_t), &s->packets);
@@ -39,7 +39,7 @@ void pvd_sender_end(pvd_sender *s){
 
     mt_evsock_close(&s->newpack_es);
     s->p_usocket = NULL;
-    
+
     pvd_sender_pack_t pkt;
     while (prot_queue_pop(&s->packets, &pkt) == 0){
         if (pkt.pack) free(pkt.pack);
@@ -95,7 +95,7 @@ int _pvd_sender_low_send(pvd_sender *s, protopack *packet, const nnet_fd *to, bo
     if (no_conversion){
         sz = sizeof(protopack) + ntohl(d_size);
         protopack_send(packet, buf);
-        
+
         ln_usock_send(s->p_usocket, buf, sz, to);
 
         free(copy);
@@ -127,14 +127,14 @@ int _pvd_sender_low_send(pvd_sender *s, protopack *packet, const nnet_fd *to, bo
 
 static void *pvd_sender_worker(void *_args){
     pvd_sender *sender = _args;
-    
+
     while (atomic_load(&sender->is_running)){
         int r = mt_evsock_wait(&sender->newpack_es, 1000);
         if (r < 0) {
             perror("poll()");
         }
         if (r == 0) continue;
-        
+
         pvd_sender_pack_t ppkt = {0};
         // prot_queue_lock(&sender->packets);
         while (prot_queue_pop(&sender->packets, &ppkt) == 0) {

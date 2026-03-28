@@ -16,7 +16,7 @@ typedef struct {
 } stun_addr;
 
 int natp_request_stun(
-    ln_usocket *client,
+    ln_socket *client,
     naddr_t  *stun_addr
 );
 

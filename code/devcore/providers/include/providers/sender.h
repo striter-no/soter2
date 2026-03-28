@@ -13,7 +13,7 @@
 typedef struct pvd_sender_pack pvd_sender_pack_t;
 
 typedef struct {
-    ln_usocket *p_usocket;
+    ln_socket *p_usocket;
     prot_queue  packets;
 
     mt_eventsock newpack_es;
@@ -23,7 +23,7 @@ typedef struct {
     proxy_if     proxy;
 } pvd_sender;
 
-int  pvd_sender_new(pvd_sender *s, ln_usocket *p_usocket);
+int  pvd_sender_new(pvd_sender *s, ln_socket *p_usocket);
 int  pvd_sender_proxy(pvd_sender *s, proxy_if prx);
 void pvd_sender_end(pvd_sender *s);
 int  pvd_sender_start(pvd_sender *s);

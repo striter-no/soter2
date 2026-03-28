@@ -2,18 +2,18 @@
 #include <stdio.h>
 
 int nat_get_type(
-    ln_usocket *client,
+    ln_socket *client,
     naddr_t *first_stun,
     naddr_t *second_stun,
     unsigned short port,
 
     nat_type *type
 ){
-    // ln_usocket client;
+    // ln_socket client;
     // if (0 > ln_usock_new(&client)) return -1;
 
     naddr_t addr[2] = {0};
-    
+
     naddr_t n = ln_make4(ln_ipv4("0.0.0.0", port));
     ln_netfd(&n, &client->fd);
 

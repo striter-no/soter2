@@ -10,7 +10,7 @@ typedef enum {
 } nat_type;
 
 int nat_get_type(
-    ln_usocket *client,
+    ln_socket *client,
     naddr_t *first_stun,
     naddr_t *second_stun,
     unsigned short port,
@@ -20,5 +20,5 @@ int nat_get_type(
 
 const char *strnattype(nat_type type);
 
-#endif 
+#endif
 #define NATPUNCH_NAT_H

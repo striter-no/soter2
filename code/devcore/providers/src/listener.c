@@ -1,6 +1,6 @@
 #include <providers/listener.h>
 
-int pvd_listener_new(pvd_listener *l, ln_usocket *p_usocket){
+int pvd_listener_new(pvd_listener *l, ln_socket *p_usocket){
     if (!l || !p_usocket) return -1;
 
     l->p_usocket = p_usocket;
@@ -11,7 +11,7 @@ int pvd_listener_new(pvd_listener *l, ln_usocket *p_usocket){
 
     l->daemon = 0;
     atomic_store(&l->is_running, false);
-    
+
     l->proxy = (proxy_if){0};
     return 0;
 }
@@ -31,7 +31,7 @@ void pvd_listener_end(pvd_listener *l){
 
     mt_evsock_close(&l->newpack_es);
     l->p_usocket = NULL;
-    
+
     listener_packet pkt;
     while (prot_queue_pop(&l->packets, &pkt) == 0){
         if (pkt.pack) free(pkt.pack);
@@ -62,7 +62,7 @@ int pvd_next_packet(pvd_listener *l, listener_packet *pkt){
 // worker
 static void *pvd_listener_worker(void *_args){
     pvd_listener *listener = _args;
-    
+
     nnet_fd from = {0};
     char    buf[2048] = {0};
     while (atomic_load(&listener->is_running)){
@@ -71,7 +71,7 @@ static void *pvd_listener_worker(void *_args){
         if (r < 0)  {perror("poll()"); continue;}
 
         ssize_t recved = ln_usock_recv(listener->p_usocket, buf, 2048, &from);
-        
+
         if (recved == 0) continue;
         if (recved < 0){
             perror("recvfrom()");
@@ -96,7 +96,7 @@ static void *pvd_listener_worker(void *_args){
             free(pkt);
             pkt = prx.proxyfied_pkt;
         }
-        
+
         listener_packet lpkt = {pkt, from};
         // proto_print(pkt, 1);
         // printf("[pvd][listener] got new packet from %s:%u (%zu bytes): PKTTYPE: %d\n", addr.ip.v4.ip, addr.ip.v4.port, recved, pkt->packtype);

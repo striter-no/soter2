@@ -14,3 +14,4 @@
 #include <watcher/system.h>
 #include <e2ee/connection.h>
 #include <turn/statem.h>
+#include <uhttp/server.h>
