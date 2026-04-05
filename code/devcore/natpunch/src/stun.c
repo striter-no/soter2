@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/poll.h>
+#include <base/prot_array.h>
 
 #define STUN_BINDING_REQUEST  0x0001
 #define STUN_BINDING_RESPONSE 0x0101

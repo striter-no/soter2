@@ -11,7 +11,8 @@
 #ifndef STATE_H
 
 typedef enum {
-    REQUEST_CONNECTION
+    REQUEST_CONNECTION,
+    REQUEST_PEERS
 } state_rtype;
 
 typedef struct __attribute__((packed)) {
@@ -26,6 +27,11 @@ typedef struct __attribute__((packed)) {
 } state_request;
 
 typedef struct {
+    state_request req;
+    naddr_t       come_from;
+} state_sys_request;
+
+typedef struct {
     prot_queue   new_state_ans;
     mt_eventsock new_state_fd;
 } state_system;
@@ -33,8 +39,8 @@ typedef struct {
 int  state_sys_init(state_system *sys);
 void state_sys_end (state_system *sys);
 
-int state_sys_wait(state_system *sys, state_request *out, int timeout);
-int state_sys_new_ans(state_system *sys, state_request *req);
+int state_sys_wait(state_system *sys, state_request *out, naddr_t *from, int timeout);
+int state_sys_new_ans(state_system *sys, const state_request *req, naddr_t server_from);
 
 state_request state_rcreate(
     naddr_t    addr,

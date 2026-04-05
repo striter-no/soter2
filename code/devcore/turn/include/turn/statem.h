@@ -4,6 +4,7 @@
 #include <multithr/events.h>
 #include <packproto/proto.h>
 #include <peers/peerdb.h>
+#include "packets.h"
 
 #ifndef TURN_HANDLERS_H
 #define TURN_HANDLERS_H
@@ -35,9 +36,9 @@ int turn_client_wrap(turn_client *cli, protopack *pack, protopack **outgoing);
 int turn_client_unwrap(turn_client *cli, protopack *pack, protopack **outgoing);
 
 // get request straight to address (if not behind NAT)
-int turn_client_req_bind(turn_client *cli, naddr_t bind_to, protopack **outgoing);
+int turn_client_req_bind(turn_client *cli, turn_bind_peer bind_to, protopack **outgoing);
 
 // close connection with peer through TURN
-int turn_client_req_unbind(turn_client *cli, naddr_t close_with, protopack **outgoing);
+int turn_client_req_unbind(turn_client *cli, turn_bind_peer close_with, protopack **outgoing);
 
 #endif

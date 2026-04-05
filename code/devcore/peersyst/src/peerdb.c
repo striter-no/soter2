@@ -127,7 +127,7 @@ int peers_db_linfo(const peer_info *input, light_peer_info *out){
 
     out->UID = input->UID;
     out->addr = ln_nfd2addr(&input->nfd);
-    out->sserv_addr = input->sserv_addr;
+    out->server = input->server;
     memcpy(out->pubkey, input->pubkey, CRYPTO_PUBKEY_BYTES);
 
     return 0;
@@ -144,7 +144,7 @@ int peers_db_reconstruct(peer_info *out, const light_peer_info *input){
     out->ctx = NULL;
     out->last_seen = mt_time_get_millis_monocoarse();
     out->state = PEER_ST_INITED;
-    out->sserv_addr = input->sserv_addr;
+    out->server = input->server;
     memcpy(out->pubkey, input->pubkey, CRYPTO_PUBKEY_BYTES);
 
     return 0;

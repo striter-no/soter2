@@ -15,6 +15,7 @@ int mt_evsock_close(mt_eventsock *evsock);
 
 int mt_evsock_notify(mt_eventsock *evsock);
 int mt_evsock_wait  (mt_eventsock *evsock, int timeout);
+int mt_evsock_waitm (mt_eventsock *evsocks, int n, int timeout);
 int mt_evsock_drain (mt_eventsock *evscok);
 
 #endif

@@ -87,10 +87,10 @@ int turn_client_unwrap(turn_client *cli, protopack *pack, protopack **outgoing){
     return 0;
 }
 
-int turn_client_req_bind(turn_client *cli, naddr_t bind_to, protopack **outgoing){
+int turn_client_req_bind(turn_client *cli, turn_bind_peer bind_to, protopack **outgoing){
     if (!cli || !outgoing) return -1;
 
-    turn_request *req = turn_req_make(TURN_OPEN_HOLE, bind_to, NULL, 0);
+    turn_request *req = turn_req_make(TURN_OPEN_HOLE, bind_to.linfo.addr, &bind_to.linfo, sizeof(light_peer_info));
     if (!req) return -1;
 
     *outgoing = udp_make_pack(
@@ -100,10 +100,10 @@ int turn_client_req_bind(turn_client *cli, naddr_t bind_to, protopack **outgoing
     return 0;
 }
 
-int turn_client_req_unbind(turn_client *cli, naddr_t close_with, protopack **outgoing){
+int turn_client_req_unbind(turn_client *cli, turn_bind_peer close_with, protopack **outgoing){
     if (!cli || !outgoing) return -1;
 
-    turn_request *req = turn_req_make(TURN_CLOSE_HOLE, close_with, NULL, 0);
+    turn_request *req = turn_req_make(TURN_CLOSE_HOLE, close_with.linfo.addr, &close_with.linfo, sizeof(light_peer_info));
     if (!req) return -1;
 
     *outgoing = udp_make_pack(

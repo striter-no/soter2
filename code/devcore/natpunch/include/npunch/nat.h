@@ -18,6 +18,8 @@ int nat_get_type(
     nat_type *type
 );
 
+nat_type nat_parallel_req(ln_socket *client, stun_addr *stuns, size_t stuns_n);
+
 const char *strnattype(nat_type type);
 
 #endif

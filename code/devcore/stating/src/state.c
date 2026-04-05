@@ -8,7 +8,7 @@ int state_sys_init(state_system *sys){
     if (0 > mt_evsock_new(&sys->new_state_fd))
         return -1;
 
-    prot_queue_create(sizeof(state_request), &sys->new_state_ans);
+    prot_queue_create(sizeof(state_sys_request), &sys->new_state_ans);
     return 0;
 }
 
@@ -19,22 +19,31 @@ void state_sys_end (state_system *sys){
     prot_queue_end(&sys->new_state_ans);
 }
 
-int state_sys_new_ans(state_system *sys, state_request *req){
+int state_sys_new_ans(state_system *sys, const state_request *req, naddr_t server_from){
     if (!sys || !req) return -1;
 
-    prot_queue_upush(&sys->new_state_ans, req);
+    state_sys_request sreq = {
+        .req = *req,
+        .come_from = server_from
+    };
+
+    prot_queue_upush(&sys->new_state_ans, &sreq);
     mt_evsock_notify(&sys->new_state_fd);
     return 0;
 }
 
-int state_sys_wait(state_system *sys, state_request *out, int timeout){
+int state_sys_wait(state_system *sys, state_request *out, naddr_t *from, int timeout){
     if (!sys || !out) return -1;
-    if (0 == mt_evsock_wait(&sys->new_state_fd, timeout)){ 
+    if (0 == mt_evsock_wait(&sys->new_state_fd, timeout)){
         return 0;
     }
 
+    state_sys_request sreq;
     mt_evsock_drain(&sys->new_state_fd);
-    prot_queue_pop(&sys->new_state_ans, out);
+    prot_queue_pop(&sys->new_state_ans, &sreq);
+
+    *out = sreq.req;
+    *from = sreq.come_from;
     return 1;
 }
 
@@ -75,7 +84,7 @@ int state_rreceive(
 ){
     state_request req;
     memcpy(&req, data, sizeof(req));
-    
+
     uint8_t sign_buff[sizeof(req) - CRYPTO_SIGN_BYTES] = {0};
     size_t  offset = 0;
 
