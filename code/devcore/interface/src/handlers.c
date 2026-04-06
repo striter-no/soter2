@@ -1,6 +1,7 @@
 #include "soter2/daemons.h"
 #include "soter2/systems.h"
 #include <soter2/handlers.h>
+#include <stdint.h>
 
 int soter2_hnd_ACK(protopack *pck, const nnet_fd *nfd, pvd_sender *s, void *_ctx){
     if (!_ctx) return -1;
@@ -160,41 +161,166 @@ int soter2_hnd_TURN(protopack *pck, const nnet_fd *nfd, pvd_sender *s, void *_ct
         return -1;
     }
 
+    // a.k.a connection ID
+    uint32_t hsh = turn_pair_hash(pck->h_from, trn->to_UID);
+
     // protopack *outpck;
     // turn_bind_peer bpeer;
     switch (trn->type){
-        // case TURN_CLOSE_HOLE: {
-        //     if (0 > turn_client_unbind(ctx->turn, pck->h_from)){
-        //         fprintf(stderr, "[hnd][turn] TURN_CLOSE_HOLE failed\n");
-        //         free(trn);
-        //         return -1;
-        //     }
-        // } break;
+        case TURN_CLOSE_HOLE: {
 
-        // case TURN_OPEN_HOLE:  {
-        //     if (0 > turn_client_bind(ctx->turn, pck->h_from, turn_bind_peer *peer)){
-        //         fprintf(stderr, "[hnd][turn] TURN_CLOSE_HOLE failed\n");
-        //         free(trn);
-        //         return -1;
-        //     }
-        // } break;
+            if (0 > turn_client_unbind(ctx->turn, hsh)){
 
-        case TURN_DATA_MSG:   {
+                turn_request *r = turn_client_req_sys(ctx->turn, &addr, pck->h_from, trn->TRUID, TURN_SST_FAIL, NULL);
+                turn_client_qsend(ctx->turn, r);
+                free(r);
+
+                fprintf(stderr, "[hnd][turn] TURN_CLOSE_HOLE failed\n");
+                free(trn);
+                return -1;
+            }
+
+            turn_request *r = turn_client_req_sys(ctx->turn, &addr, pck->h_from, trn->TRUID, TURN_SST_OK, NULL);
+            turn_client_qsend(ctx->turn, r);
+            free(r);
 
         } break;
 
-        case TURN_SYSTEM_MSG:
+        case TURN_OPEN_HOLE:  {
+            if (sizeof(light_peer_info) != trn->d_size){
+
+                turn_request *r = turn_client_req_sys(ctx->turn, &addr, pck->h_from, trn->TRUID, TURN_SST_FAIL, NULL);
+                turn_client_qsend(ctx->turn, r);
+                free(r);
+
+                fprintf(stderr, "[hnd][turn] TURN_OPEN_HOLE failed, unknown payload\n");
+                free(trn);
+                return -1;
+            }
+
+            light_peer_info linfo, origin_linfo;
+            memcpy(&linfo, trn->data, trn->d_size);
+
+            peer_info origin_info;
+            if (0 > peers_db_get(ctx->p_db, pck->h_from, &origin_info)){
+                turn_request *r = turn_client_req_sys(ctx->turn, &addr, pck->h_from, trn->TRUID, TURN_SST_FAIL, NULL);
+                turn_client_qsend(ctx->turn, r);
+                free(r);
+
+                fprintf(stderr, "[hnd][turn] TURN_OPEN_HOLE failed, unknown peer\n");
+                free(trn);
+                return -1;
+            }
+
+            peers_db_linfo(&origin_info, &origin_linfo);
+
+            turn_bind_peer bpeer = {
+                .linfo_connected = linfo,
+                .linfo_origin    = origin_linfo
+            };
+
+            if (0 > turn_client_bind(ctx->turn, pck->h_from, &bpeer)){
+
+                turn_request *r = turn_client_req_sys(ctx->turn, &addr, pck->h_from, trn->TRUID, TURN_SST_FAIL, NULL);
+                turn_client_qsend(ctx->turn, r);
+                free(r);
+
+                fprintf(stderr, "[hnd][turn] TURN_OPEN_HOLE failed\n");
+                free(trn);
+                return -1;
+            }
+
+            turn_request *r = turn_client_req_sys(ctx->turn, &addr, pck->h_from, trn->TRUID, TURN_SST_OK, NULL);
+            turn_client_qsend(ctx->turn, r);
+            free(r);
+
+            printf("[hnd][turn] Opened new HOLE\n");
+        } break;
+
+        case TURN_DATA_MSG: {
+            protopack *outgoing = NULL;
+            if (0 > turn_client_unwrap(ctx->turn, pck, &outgoing)){
+
+                // turn_request *r = turn_client_req_sys(ctx->turn, &addr, pck->h_from, trn->TRUID, TURN_SST_FAIL, NULL);
+                // turn_client_qsend(ctx->turn, r);
+                // free(r);
+
+                fprintf(stderr, "[hnd][turn] TURN_DATA_MSG unwrap failed\n");
+                free(trn);
+                return -1;
+            }
+
+            listener_packet lst = {.from_who = *nfd, .pack = outgoing};
+            pvd_listener_pass(ctx->listener, &lst);
+
+            // turn_request *r = turn_client_req_sys(ctx->turn, &addr, pck->h_from, trn->TRUID, TURN_SST_OK, NULL);
+            // turn_client_qsend(ctx->turn, r);
+            // free(r);
+        } break;
+
+        case TURN_SYSTEM_MSG: {
+            char *commentary = NULL;
+            turn_sys_status status;
+            uint32_t truid;
+            if (0 > turn_client_unwrap_sys(ctx->turn, trn, &status, &commentary, &truid)){
+
+                fprintf(stderr, "[hnd][turn] TURN_SYSTEM_MSG unwrap failed\n");
+                free(trn);
+                return -1;
+            }
+
+            if (commentary) {
+                fprintf(stderr, "[hnd][turn][sys] commentary: %s\n", commentary);
+                free(commentary);
+            }
+        }
+
         default:
             break;
     }
 
     free(trn);
+    return 0;
+}
 
-    protopack *outgoing = NULL;
-    if (0 > turn_client_unwrap(ctx->turn, pck, &outgoing)){
-        fprintf(stderr, "[hnd][turn] failed to unwrap turn request\n");
+// receiver of HELLO requests
+int soter2_hnd_HELLO(protopack *pck, const nnet_fd *nfd, pvd_sender *s, void *_ctx){
+    app_context *ctx = _ctx;
+    // (void)s;
+    // (void)nfd;
+
+    peer_info info;
+    light_peer_info linfo;
+    if (pck->d_size != sizeof(linfo)){
+        fprintf(stderr, "[hnd][hello] data size is not sizeof(light_peer_info): %u\n", pck->d_size);
         return -1;
     }
 
+    memcpy(&linfo, pck->data, sizeof(linfo));
+    peers_db_reconstruct(&info, &linfo);
+
+    info.state = PEER_ST_ACTIVE;
+    peers_db_add(ctx->p_db, info);
+
+    protopack *pkt = proto_msg_quick(ctx->rudp->self_uid, pck->h_from, 0, PACK_HELLO2);
+    pvd_sender_send(s, pkt, nfd);
+    free(pkt);
+
+    return 0;
+}
+
+// initiator of HELLO sequence
+int soter2_hnd_HELLO2(protopack *pck, const nnet_fd *nfd, pvd_sender *s, void *_ctx){
+    app_context *ctx = _ctx;
+    (void)s;
+    (void)nfd;
+
+    peer_info info;
+    if (0 > peers_db_get(ctx->p_db, pck->h_from, &info)){
+        fprintf(stderr, "[hnd][hello2] hello answer from unknown peer\n");
+        return -1;
+    }
+
+    peers_db_schange(ctx->p_db, pck->h_from, PEER_ST_ACTIVE);
     return 0;
 }

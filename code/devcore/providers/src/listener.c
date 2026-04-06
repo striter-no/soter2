@@ -49,6 +49,13 @@ int pvd_listener_start(pvd_listener *l){
     return 0;
 }
 
+int pvd_listener_pass(pvd_listener *l, const listener_packet *pkt){
+    prot_queue_push(&l->packets, pkt);
+    mt_evsock_notify(&l->newpack_es);
+
+    return 0;
+}
+
 int pvd_next_packet(pvd_listener *l, listener_packet *pkt){
     if (!l) return -1;
 

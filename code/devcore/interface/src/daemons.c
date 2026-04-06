@@ -156,6 +156,27 @@ skip_addt:
     listener_packet pkt;
     while (0 == pvd_next_packet(&s2s->io_sys.listener, &pkt)){
 
+        // check TURN, if it is from TURNed client, retranslate packet to real client
+        if (turn_check_pair(&s2s->turn_cli, pkt.pack->h_to, pkt.pack->h_from)){ // reversed order hash(from,to) -> hash(to,from)
+            uint32_t hsh = turn_pair_hash(pkt.pack->h_to, pkt.pack->h_from); // reversed order
+
+            protopack *outpack = NULL;
+            turn_client_wrap(&s2s->turn_cli, pkt.pack, &outpack);
+
+            turn_bind_peer bpeer;
+            if (0 > turn_client_info(&s2s->turn_cli, hsh, &bpeer)){
+                fprintf(stderr, "[daemon][io] turn_client_info failed on hsh: %u\n", hsh);
+                goto skip;
+            }
+
+            naddr_t addr = bpeer.linfo_origin.addr;
+            nnet_fd fd   = ln_netfdq(&addr);
+            pvd_sender_send(&s2s->io_sys.sender, outpack, &fd);
+
+            free(pkt.pack);
+            goto skip;
+        }
+
         if (udp_is_RUDP_req(pkt.pack->packtype)){
             printf("[s2s] rudp pkt from %u\n", pkt.pack->h_from);
             rudp_dispatcher_pass(&s2s->rudp_disp, pkt.pack);
@@ -163,6 +184,8 @@ skip_addt:
             proto_print(pkt.pack, 1);
             watcher_pass(&s2s->io_sys.wtch, pkt.pack, &pkt.from_who);
         }
+
+skip:
         s2s->analysis_mod.packets_translated++;
         peers_db_utime(&s2s->peers_sys, pkt.pack->h_from);
     }

@@ -1,6 +1,7 @@
 #include <stddef.h>
 #include <lownet/core.h>
 #include <stdint.h>
+#include <sys/types.h>
 
 #ifndef TURN_PACKETS_H
 #define TURN_PACKETS_H
@@ -14,7 +15,10 @@ typedef enum {
 
 typedef struct {
     turn_rtype type;
+    uint32_t   to_UID;
+    uint32_t   TRUID;
     naddr_t    to_whom;
+
 
     uint32_t   d_size;
     unsigned char data[];
@@ -23,9 +27,18 @@ typedef struct {
 turn_request *turn_req_make(
     turn_rtype  type,
     naddr_t     to_whom,
+    uint32_t    to_UID,
+    uint32_t    TRUID,
     const void *data,
     uint32_t    d_size
 );
+
+// int turn_req_send(
+//     const turn_request *request,
+
+//     unsigned char **data,
+//     uint32_t       *d_size
+// );
 
 turn_request *turn_req_recv(
     const void *data,

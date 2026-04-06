@@ -29,6 +29,7 @@ typedef struct {
 int  pvd_listener_new(pvd_listener *l, ln_socket *p_usocket);
 void pvd_listener_end(pvd_listener *l);
 int  pvd_listener_proxy(pvd_listener *l, proxy_if prx);
+int  pvd_listener_pass (pvd_listener *l, const listener_packet *pkt);
 
 int pvd_listener_start(pvd_listener *l);
 int pvd_next_packet(pvd_listener *l, listener_packet *pkt);

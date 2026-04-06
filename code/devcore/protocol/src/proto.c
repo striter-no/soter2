@@ -11,7 +11,13 @@ const char *PROTOPACK_TYPES_CHAR[] = {
     "PACK_PUNCH",
     "PACK_GOSSIP",
     "PACK_STATE",
-    "PACK_RACK"
+    "PACK_RACK",
+    "PACK_FIN",
+    "PACK_RAW_UDP",
+    "PACK_NULL",
+    "PACK_TURN",
+    "PACK_HELLO",
+    "PACK_HELLO2"
 };
 
 uint32_t crc32(const void *data, size_t n_bytes) {

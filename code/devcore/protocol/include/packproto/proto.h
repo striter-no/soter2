@@ -18,6 +18,8 @@ typedef enum {
     PACK_RAW_UDP,   // no RUDP (default handler NULL)
     PACK_NULL,      // reserved to RELAY and other non-data packets
     PACK_TURN,      // TURN layer
+    PACK_HELLO,     // For white-IP peers
+    PACK_HELLO2,    // For white-IP peers
     __PROTOPACK_END
 } protopack_type;
 

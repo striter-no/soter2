@@ -10,7 +10,9 @@ int soter2_hnd_PING  (protopack *pck, const nnet_fd *nfd, pvd_sender *s, void *c
 int soter2_hnd_PONG  (protopack *pck, const nnet_fd *nfd, pvd_sender *s, void *ctx);
 int soter2_hnd_GOSSIP(protopack *pck, const nnet_fd *nfd, pvd_sender *s, void *ctx);
 int soter2_hnd_STATE (protopack *pck, const nnet_fd *nfd, pvd_sender *s, void *ctx);
-int soter2_hnd_TURN  (protopack *pck, const nnet_fd *nfd, pvd_sender *s, void *_ctx);
+int soter2_hnd_TURN  (protopack *pck, const nnet_fd *nfd, pvd_sender *s, void *ctx);
+int soter2_hnd_HELLO (protopack *pck, const nnet_fd *nfd, pvd_sender *s, void *ctx);
+int soter2_hnd_HELLO2(protopack *pck, const nnet_fd *nfd, pvd_sender *s, void *ctx);
 
 typedef struct {
     rudp_dispatcher *rudp;

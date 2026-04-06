@@ -42,7 +42,7 @@ int s2_systems_create(s2_systems *s){
     if (0 > peers_db_init      (&s->peers_sys))                                       goto fail;
     if (0 > gossip_system_init (&s->gossip_sys, s->crypto_mod.UID))                   goto fail;
     if (0 > rudp_dispatcher_new(&s->rudp_disp, &s->io_sys.sender, s->crypto_mod.UID)) goto fail;
-    if (0 > turn_client_init   (&s->turn_cli, s->crypto_mod.UID))                     goto fail;
+    if (0 > turn_client_init   (&s->turn_cli, s->crypto_mod.UID, &s->io_sys.sender))  goto fail;
 
     // registering handlers
 
@@ -52,7 +52,9 @@ int s2_systems_create(s2_systems *s){
     watcher_handler_reg(&s->io_sys.wtch, PACK_PONG,   (watcher_handler){soter2_hnd_PONG,   &s->ctx});
     watcher_handler_reg(&s->io_sys.wtch, PACK_GOSSIP, (watcher_handler){soter2_hnd_GOSSIP, &s->ctx});
     watcher_handler_reg(&s->io_sys.wtch, PACK_STATE,  (watcher_handler){soter2_hnd_STATE,  &s->ctx});
-    watcher_handler_reg(&s->io_sys.wtch, PACK_TURN,   (watcher_handler){soter2_hnd_TURN,  &s->ctx});
+    watcher_handler_reg(&s->io_sys.wtch, PACK_TURN,   (watcher_handler){soter2_hnd_TURN,   &s->ctx});
+    watcher_handler_reg(&s->io_sys.wtch, PACK_HELLO,  (watcher_handler){soter2_hnd_HELLO,  &s->ctx});
+    watcher_handler_reg(&s->io_sys.wtch, PACK_HELLO2, (watcher_handler){soter2_hnd_HELLO2, &s->ctx});
 
     // context
 
