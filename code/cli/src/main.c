@@ -95,9 +95,19 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-    uhttp_set_route(&http_serv, "/api/connect", handle_connect);
-    uhttp_set_route(&http_serv, "/api/disconnect", handle_disconnect);
-    uhttp_set_route(&http_serv, "/api/status", handle_status);
+    uhttp_set_route(&http_serv, "/api/peer/connect",    handle_peer_connect); // done
+    uhttp_set_route(&http_serv, "/api/peer/disconnect", handle_peer_disconnect); // done
+    uhttp_set_route(&http_serv, "/api/peer/info",       handle_peer_info);
+
+    uhttp_set_route(&http_serv, "/api/turn/connect",    handle_turn_connect);
+    uhttp_set_route(&http_serv, "/api/turn/disconnect", handle_turn_disconnect);
+    uhttp_set_route(&http_serv, "/api/turn/specs",      handle_turn_specs);
+
+    uhttp_set_route(&http_serv, "/api/stating/connect",    handle_stating_connect);
+    uhttp_set_route(&http_serv, "/api/stating/disconnect", handle_stating_disconnect);
+
+    uhttp_set_route(&http_serv, "/api/status", handle_status); // done
+    uhttp_set_route(&http_serv, "/api/wait",   handle_wait);
 
     printf("[main] HTTP server listening on port %u\n", http_port);
     printf("[main] API endpoints:\n");

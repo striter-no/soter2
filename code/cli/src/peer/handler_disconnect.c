@@ -6,7 +6,7 @@ static int _actual_handler(s2_systems *s2s, uint32_t uid){
     return s2_sys_closeconn(s2s, uid);
 }
 
-uhttp_response handle_disconnect(uhttp_high_request *req, void *ctx) {
+uhttp_response handle_peer_disconnect(uhttp_high_request *req, void *ctx) {
     s2_systems *s2s = ctx;
 
     if (req->req.method != HTTP_POST)

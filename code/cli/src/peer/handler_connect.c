@@ -26,8 +26,7 @@ static int _actual_handler(s2_systems *s2s, const char *uni_pm, const char *port
     return 0;
 }
 
-uhttp_response handle_connect(uhttp_high_request *req, void *ctx){
-    printf("[handle_connect] called\n");
+uhttp_response handle_peer_connect(uhttp_high_request *req, void *ctx){
     s2_systems *s2s = ctx;
 
     if (req->req.method != HTTP_POST) {
