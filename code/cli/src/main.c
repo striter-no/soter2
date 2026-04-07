@@ -30,6 +30,7 @@ int main(int argc, char *argv[]) {
     signal(SIGTERM, signal_handler);
 
     s2_systems s2s;
+    s2_daemons s2d;
 
     if (s2_systems_create(&s2s) < 0) {
         fprintf(stderr, "[main] failed to create systems\n");
@@ -76,6 +77,12 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
+    if (s2_daemons_create(&s2d, &s2s) < 0){
+        fprintf(stderr, "[main] failed to create system daemons\n");
+        s2_systems_stop(&s2s);
+        return -1;
+    }
+
     printf("[main] systems started\n");
 
     uhttp_serv http_serv;
@@ -89,13 +96,13 @@ int main(int argc, char *argv[]) {
     }
 
     uhttp_set_route(&http_serv, "/api/connect", handle_connect);
-    // uhttp_set_route(&http_serv, "/api/disconnect", handle_disconnect);
+    uhttp_set_route(&http_serv, "/api/disconnect", handle_disconnect);
     uhttp_set_route(&http_serv, "/api/status", handle_status);
 
     printf("[main] HTTP server listening on port %u\n", http_port);
     printf("[main] API endpoints:\n");
-    printf("[main]   POST  /api/connect?uni=...&port=...&pubuid=...\n");
-    // printf("[main]   POST /api/disconnect?uid=...\n");
+    printf("[main]   POST /api/connect?uni=...&port=...&pubuid=...\n");
+    printf("[main]   POST /api/disconnect?uid=...\n");
     printf("[main]   GET  /api/status\n");
 
     uhttp_server_poll_routes(&http_serv);
@@ -103,6 +110,9 @@ int main(int argc, char *argv[]) {
     printf("[main] stopping HTTP server...\n");
     uhttp_server_stop(&http_serv);
     uhttp_server_end(&http_serv);
+
+    printf("[main] stopping daemons...\n");
+    s2_daemons_stop(&s2d);
 
     printf("[main] stopping systems...\n");
     s2_systems_stop(&s2s);

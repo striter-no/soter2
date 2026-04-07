@@ -62,7 +62,7 @@ state_request state_rcreate(
     req.timestamp = htonll(mt_time_get_seconds());
     memcpy(req.pubkey, s.id_pub, CRYPTO_PUBKEY_BYTES);
 
-    printf("[state][rcr] fingerprint: %s\n", crypto_fingerprint(req.pubkey));
+    // printf("[state][rcr] fingerprint: %s\n", crypto_fingerprint(req.pubkey));
     uint8_t sign_buff[sizeof(req) - CRYPTO_SIGN_BYTES] = {0};
     size_t  offset = 0;
 

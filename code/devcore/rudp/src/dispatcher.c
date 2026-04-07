@@ -58,15 +58,23 @@ int rudp_dispatcher_end(rudp_dispatcher *disp){
         free(pkt);
     }
 
+    prot_table_lock(&disp->connections);
     for (size_t i = 0; i < disp->connections.table.array.len; i++){
+        printf("[disp][end] ending %zu connection\n", i);
         dyn_pair *pair = dyn_array_at(&disp->connections.table.array, i);
-        if (!pair) continue;
+        if (!pair) {
+            printf("[disp][end] ending %zu connection failed (1)\n", i);
+            continue;
+        }
 
         if (pair->second){
             rudp_conn_close(*((rudp_connection**)pair->second));
             free(*((rudp_connection**)pair->second));
+        } else {
+            printf("[disp][end] ending %zu connection failed (2)\n", i);
         }
     }
+    prot_table_unlock(&disp->connections);
 
     // -- ending
 
@@ -86,7 +94,7 @@ int rudp_est_connection(
     if (!disp || !out_conn) return -1;
 
     *out_conn = malloc(sizeof(**out_conn));
-    if (!out_conn) return -1;
+    if (!*out_conn) return -1;
 
     if (0 > rudp_conn_new(*out_conn, disp->sender, disp->self_uid, other_UID, *nfd)){
         free(*out_conn);
@@ -135,10 +143,13 @@ int rudp_close_conncetion(
     rudp_connection **conn = prot_table_get(&disp->connections, &UID);
     if (!conn) return -1;
     if (!(*conn)){
+        printf("[rudp][closeconn] conn is NULL\n");
         return prot_table_remove(&disp->connections, &UID);
     }
 
     rudp_conn_close(*conn);
+
+    free(*conn);
     return prot_table_remove(&disp->connections, &UID);
 }
 

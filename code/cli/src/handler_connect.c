@@ -1,7 +1,30 @@
 #include "soter2/systems.h"
 #include "uhttp/api.h"
 #include "ujson.h"
+#include <stdint.h>
 #include <uhttp_handlers.h>
+
+static int _actual_handler(s2_systems *s2s, const char *uni_pm, const char *port_pm, const char *pubuid_pm, uint32_t *uid){
+    // uint32_t UID = 0;
+    unsigned char PUBKEY[CRYPTO_PUBKEY_BYTES] = {0};
+    unsigned short port = (unsigned short)atoi(port_pm);
+    if (0 > crypto_decode_pubkey_uid(pubuid_pm, PUBKEY, uid))
+        return -1;
+
+    naddr_t addr, serv_addr = {0};
+    if (ln_uni(uni_pm, port, &addr) < 0)
+        return -2;
+
+    if (0 > s2_sys_new_peer(s2s, addr, serv_addr, *uid, PUBKEY))
+        return -3;
+
+    if (0 > s2_sys_nat_punch(s2s, *uid)){
+        peers_db_remove(&s2s->peers_sys, *uid);
+        return -4;
+    }
+
+    return 0;
+}
 
 uhttp_response handle_connect(uhttp_high_request *req, void *ctx){
     printf("[handle_connect] called\n");
@@ -25,38 +48,25 @@ uhttp_response handle_connect(uhttp_high_request *req, void *ctx){
     const char *port_pm   = uhttp_get_param(params, 3, "port");
     const char *pubuid_pm = uhttp_get_param(params, 3, "pubuid");
 
-    uint32_t UID = 0;
-    unsigned char PUBKEY[CRYPTO_PUBKEY_BYTES] = {0};
-    unsigned short port = (unsigned short)atoi(port_pm);
-    if (0 > crypto_decode_pubkey_uid(pubuid_pm, PUBKEY, &UID)){
+    int r; uint32_t uid;
+    if ((r = _actual_handler(s2s, uni_pm, port_pm, pubuid_pm, &uid)) < 0){
         uhttp_free_params(params, 3);
-        return uhttp_create_responseq(400, "Bad Request", "Failed to decode pubuid to pubkey and uid", -1, HTTP_TEXT_PLAIN);
-    }
-
-    naddr_t addr, serv_addr = {0};
-    if (ln_uni(uni_pm, port, &addr) < 0){
-        uhttp_free_params(params, 3);
-        return uhttp_create_responseq(400, "Bad Request", "Invalid IP address/Domain", -1, HTTP_TEXT_PLAIN);
-    }
-
-    if (0 > s2_sys_new_peer(s2s, addr, serv_addr, UID, PUBKEY)){
-        uhttp_free_params(params, 3);
-        return uhttp_create_responseq(500, "Internal Server Error", "Failed to add peer", -1, HTTP_TEXT_PLAIN);
-    }
-
-    if (0 > s2_sys_nat_punch(s2s, UID)){
-        uhttp_free_params(params, 3);
-        peers_db_remove(&s2s->peers_sys, UID);
-        return uhttp_create_responseq(500, "Internal Server Error", "Failed to NAT punch", -1, HTTP_TEXT_PLAIN);
+        switch (r){
+            case -1: return uhttp_create_responseq(400, "Bad Request", "Failed to decode pubuid to pubkey and uid", -1, HTTP_TEXT_PLAIN);
+            case -2: return uhttp_create_responseq(400, "Bad Request", "Invalid IP address/Domain", -1, HTTP_TEXT_PLAIN);
+            case -3: return uhttp_create_responseq(500, "Internal Server Error", "Failed to add peer", -1, HTTP_TEXT_PLAIN);
+            case -4: return uhttp_create_responseq(500, "Internal Server Error", "Failed to NAT punch", -1, HTTP_TEXT_PLAIN);
+        }
     }
 
     char fmted[512];
-    snprintf(fmted, sizeof(fmted), "Connecting to peer %u at %s:%u", UID, uni_pm, port);
+    snprintf(fmted, sizeof(fmted), "Connecting to peer at %s:%s", uni_pm, port_pm);
     uhttp_free_params(params, 3);
 
     ujson_wo *jwo = ujson_wo_create();
     ujson_wo_add_str(jwo, "status", "ok");
     ujson_wo_add_str(jwo, "message", fmted);
+    ujson_wo_add_int(jwo, "uid", uid);
 
     char *jresp = NULL;
     if (ujson_wo_serialize(jwo, &jresp, NULL) != UJSON_OK){

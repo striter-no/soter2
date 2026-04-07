@@ -9,6 +9,7 @@ int soter2_hnd_ACK(protopack *pck, const nnet_fd *nfd, pvd_sender *s, void *_ctx
 
     app_context *ctx = _ctx;
 
+    printf("[hnd][ack] got new ack\n");
     peer_info info;
     if (0 > peers_db_get(ctx->p_db, pck->h_from, &info)){
         fprintf(stderr, "[hnd][ack] `%u` is unknown\n", pck->h_from);

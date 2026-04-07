@@ -85,8 +85,10 @@ int s2_sys_load_sign(s2_systems *sys, const char *path);
 int s2_sys_upd_sign (s2_systems *sys,  const char *path);
 
 nat_type s2_sys_stun_perf(s2_systems *s, stun_addr *stuns, size_t stuns_n);
-int s2_sys_new_peer(s2_systems *s, naddr_t addr, naddr_t serv_addr, uint32_t UID, unsigned char pubkey[CRYPTO_PUBKEY_BYTES]);
+int s2_sys_new_peer (s2_systems *s, naddr_t addr, naddr_t serv_addr, uint32_t UID, unsigned char pubkey[CRYPTO_PUBKEY_BYTES]);
 int s2_sys_nat_punch(s2_systems *s, uint32_t UID);
-int s2_sys_wstate(s2_systems *s, uint32_t UID, peer_state state, peer_info *out_info);
+int s2_sys_wstate   (s2_systems *s, uint32_t UID, peer_state state, peer_info *out_info);
+
+int s2_sys_closeconn(s2_systems *s, uint32_t UID);
 
 #endif

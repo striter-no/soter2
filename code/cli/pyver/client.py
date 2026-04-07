@@ -1,6 +1,7 @@
 import requests
 import sys
-import json
+import time
+import random
 
 def connect(
     http_base: str,
@@ -13,15 +14,23 @@ def connect(
         "port": port,
         "pubuid": pubuid
     })
+
     if r.status_code != 200:
         return
 
     js = r.json()
     return js
 
-def status(
-    http_base: str
-):
+def disconnect(http_base: str, uid: int):
+    r = requests.post(http_base + "/api/disconnect", params = {"uid": uid})
+
+    if r.status_code != 200:
+        return
+
+    js = r.json()
+    return js
+
+def status(http_base: str):
     r = requests.get(http_base + "/api/status")
 
     if r.status_code != 200:
@@ -43,4 +52,7 @@ if __name__ == "__main__":
         f"http://localhost:{sys.argv[1]}",
         uni, int(port), pubuid
     )
-    print(conn_data["message"])
+    print(conn_data["message"], conn_data["uid"])
+
+    time.sleep(random.randint(2, 6))
+    print(disconnect(f"http://localhost:{sys.argv[1]}", conn_data["uid"])["message"])

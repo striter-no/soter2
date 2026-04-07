@@ -1,4 +1,5 @@
 #include <multithr/daemons.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 typedef struct {
@@ -17,7 +18,10 @@ static void *_daemon_wrapper(void *_args){
     }
 
     while (args->run_as_iter && atomic_load(args->is_running)){
-        if (!args->func(args->args)) atomic_store(args->is_running, false);
+        if (!args->func(args->args)){
+            atomic_store(args->is_running, false);
+            printf("[mdaemon] stopping iter daemon\n");
+        }
     }
 
     free(args);

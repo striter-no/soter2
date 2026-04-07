@@ -7,3 +7,5 @@ lib
 dev
 *.dat
 .zed
+venv
+__pycache__

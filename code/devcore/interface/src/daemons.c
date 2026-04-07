@@ -36,8 +36,9 @@ static int ping_iter(const peer_info *info, s2_systems *s2s){
     if (s2s->ctx.now_ms - info->last_seen >= 10 * 1000){
         printf("Dead peer detected: %u\n", info->UID);
 
-        prot_queue_push(&s2s->conn_mod.reqd_disconns, &info->UID);
-        mt_evsock_notify(&s2s->conn_mod.reqd_conn_ev);
+        rudp_close_conncetion(&s2s->rudp_disp, info->UID);
+        // prot_queue_push(&s2s->conn_mod.reqd_disconns, &info->UID);
+        // mt_evsock_notify(&s2s->conn_mod.reqd_conn_ev);
         return 1;
     }
 
@@ -91,7 +92,7 @@ static int gossip_iter(const peer_info *info, app_context *ctx){
 // * gossiping
 // * skip_addt: listening to packets, distributing it
 static bool _daemon_io(void *_args){
-main:
+    // printf("[daemon][io] called\n");
     s2_systems *s2s = _args;
 
     s2s->ctx.now_ms = mt_time_get_millis_monocoarse();
@@ -148,7 +149,7 @@ main:
 
 skip_addt:
 
-    if (r == 0) return false;
+    if (r == 0) return true;
     if (r < 0) {
         perror("poll()");
         return false;
@@ -156,6 +157,8 @@ skip_addt:
 
     listener_packet pkt;
     while (0 == pvd_next_packet(&s2s->io_sys.listener, &pkt)){
+        printf("[daemon][io] got packet\n");
+        uint32_t h_from = pkt.pack->h_from;
 
         // check TURN, if it is from TURNed client, retranslate packet to real client
         if (turn_check_pair(&s2s->turn_cli, pkt.pack->h_to, pkt.pack->h_from)){ // reversed order hash(from,to) -> hash(to,from)
@@ -179,7 +182,7 @@ skip_addt:
         }
 
         if (udp_is_RUDP_req(pkt.pack->packtype)){
-            printf("[s2s] rudp pkt from %u\n", pkt.pack->h_from);
+            printf("[s2s] rudp pkt from %u\n", h_from);
             rudp_dispatcher_pass(&s2s->rudp_disp, pkt.pack);
         } else {
             proto_print(pkt.pack, 1);
@@ -188,17 +191,19 @@ skip_addt:
 
 skip:
         s2s->analysis_mod.packets_translated++;
-        peers_db_utime(&s2s->peers_sys, pkt.pack->h_from);
+        peers_db_utime(&s2s->peers_sys, h_from);
     }
 
-    return false;
+    return true;
 }
 
 // monitoring state responses
 static bool _daemon_st(void *_args){
+    // printf("[daemon][st] called\n");
     s2_systems *s2s = _args;
 
     int r = mt_evsock_wait(&s2s->state_mod.sys.new_state_fd, 50);
+    if (r < 0) return false;
     mt_evsock_drain(&s2s->state_mod.sys.new_state_fd);
 
     if (r > 0){
@@ -230,6 +235,7 @@ static bool _daemon_st(void *_args){
         if (info.state != PEER_ST_ACTIVE) continue;
 
         rudp_connection *existing_conn = NULL;
+
         if (0 == rudp_get_connection(&s2s->rudp_disp, info.UID, &existing_conn)) {
             continue;
         }
@@ -252,7 +258,7 @@ static bool _daemon_st(void *_args){
     }
 
     free(snapshot);
-    return false;
+    return true;
 }
 
 int s2_daemons_create(s2_daemons *d, s2_systems *ctx){

@@ -145,6 +145,7 @@ int s2_sys_load_sign(s2_systems *sys, const char *path){
 
     sys->rudp_disp.self_uid = crypto_pubkey_to_uid(sys->crypto_mod.self_sign.id_pub);
     sys->gossip_sys.self_uid = sys->rudp_disp.self_uid;
+    sys->crypto_mod.UID = sys->rudp_disp.self_uid;
     return 0;
 }
 
@@ -204,7 +205,7 @@ int s2_sys_nat_punch(
     pvd_sender_send(&s->io_sys.sender, punch_msg, &info.nfd);
 
     naddr_t addr = ln_nfd2addr(&info.nfd);
-    printf("[s2] NAT punch sent to %s:%u\n", ln_gip(&addr), ln_gport(&addr));
+    printf("[s2] NAT punch sent to %s:%u:%u\n", ln_gip(&addr), ln_gport(&addr), UID);
     free(punch_msg);
 
     return 0;
@@ -212,4 +213,13 @@ int s2_sys_nat_punch(
 
 int s2_sys_wstate(s2_systems *s, uint32_t UID, peer_state state, peer_info *out_info){
     return peers_db_wait(&s->peers_sys, UID, state, out_info);
+}
+
+int s2_sys_closeconn(s2_systems *s, uint32_t UID){
+    if (!peers_db_check(&s->peers_sys, UID)) return -1;
+
+    peers_db_remove(&s->peers_sys, UID);
+    rudp_close_conncetion(&s->rudp_disp, UID);
+
+    return 0;
 }
