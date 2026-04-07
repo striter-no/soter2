@@ -7,7 +7,7 @@ static int state_iter(s2_systems *s2s){
     state_request r = state_rcreate(
         s2s->io_sys.usock.addr,
         s2s->rudp_disp.self_uid,
-        rand() % 2 == 0 ? REQUEST_CONNECTION: REQUEST_PEERS, // 50/50 to request peers or update status on server
+        REQUEST_PEERS,
         s2s->crypto_mod.self_sign
     );
 
@@ -97,6 +97,7 @@ main:
     s2s->ctx.now_ms = mt_time_get_millis_monocoarse();
     int r = mt_evsock_wait(&s2s->io_sys.listener.newpack_es, 1000);
     mt_evsock_drain(&s2s->io_sys.listener.newpack_es);
+    if (r < 0) return false;
 
     if (s2s->ctx.now_ms - s2s->analysis_mod.packets_timestamp >= 1000) {
         int64_t delta_ms = s2s->ctx.now_ms - s2s->analysis_mod.packets_timestamp;

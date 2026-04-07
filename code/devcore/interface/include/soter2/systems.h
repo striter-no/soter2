@@ -79,8 +79,14 @@ int s2_systems_stop  (s2_systems *s);
 void s2_sys_shandlers(s2_systems *s, s2_ivtable vt);
 
 const char *s2_fingerprint(s2_systems *sys);
+char       *s2_pubuid     (s2_systems *sys);
 int s2_sys_save_sign(s2_systems *sys, const char *path);
 int s2_sys_load_sign(s2_systems *sys, const char *path);
-int s2_sys_upd_sign(s2_systems *sys,  const char *path);
+int s2_sys_upd_sign (s2_systems *sys,  const char *path);
+
+nat_type s2_sys_stun_perf(s2_systems *s, stun_addr *stuns, size_t stuns_n);
+int s2_sys_new_peer(s2_systems *s, naddr_t addr, naddr_t serv_addr, uint32_t UID, unsigned char pubkey[CRYPTO_PUBKEY_BYTES]);
+int s2_sys_nat_punch(s2_systems *s, uint32_t UID);
+int s2_sys_wstate(s2_systems *s, uint32_t UID, peer_state state, peer_info *out_info);
 
 #endif

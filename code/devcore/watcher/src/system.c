@@ -4,7 +4,7 @@
 
 int watcher_init(watcher *w, pvd_sender *sender, pvd_listener *listener){
     if (!w || !sender || !listener) return -1;
-    
+
     if (0 > mt_evsock_new(&w->newpack))
         return -1;
 
@@ -83,7 +83,7 @@ static void *watcher_worker(void *_args){
         if (r == 0) continue;
         if (r < 0) {
             perror("poll()");
-            continue;
+            break;
         }
 
         // printf("[watcher] got new event\n");
@@ -121,5 +121,6 @@ static void *watcher_worker(void *_args){
         free(pkt);
     }
 
+    atomic_store(&w->is_running, false);
     return NULL;
 }

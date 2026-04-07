@@ -6,10 +6,10 @@
 
 typedef struct {
     // listener
-    daemon io_daemon;
+    mdaemon io_daemon;
 
     // stating
-    daemon st_daemon;
+    mdaemon st_daemon;
 } s2_daemons;
 
 int s2_daemons_create(s2_daemons *d, s2_systems *ctx);

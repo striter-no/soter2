@@ -7,8 +7,8 @@
 - [x] Create RUDP, Peer System, gossip mechanism, etc.
 - [x] Create module to link all submodules (devcore)
 - [x] Enable E2EE
-- [x] Create basic CLI
-- [ ] Create TURN, Relay modules
+- [ ] Create basic CLI
+- [x] Create TURN, Relay modules
 - [ ] Create basic Web interface
 - [ ] Create basic Android client
 - [ ] Include anti-censorship mechanisms
@@ -23,7 +23,9 @@
 sudo ./code/sodium_inst.sh
 ```
 
-2. You need **ABS** build system in order to build this project:
+2. You need to install [yyjson](https://github.com/ibireme/yyjson)
+
+3. You need **ABS** build system in order to build this project:
 
 ```sh
 git clone https://github.com/striter-no/abs
@@ -33,8 +35,8 @@ cd abs
 make && make install 
 ```
 
-3. Than in root directory run `abs`, it will automaticly build all modules in project
-4. After successfull build you can test modules `code/cli` and `code/stating`
+4. Than in root directory run `abs`, it will automaticly build all modules in project
+5. After successfull build you can test modules `code/cli` and `code/stating`
 
 ### How to use
 

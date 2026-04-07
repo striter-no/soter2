@@ -1,3 +1,5 @@
+#include "uhttp/parser.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -6,10 +8,18 @@
 const char* uhttp_str_content_type(uhttp_content_type ct) {
     switch (ct) {
         case HTTP_TEXT_PLAIN: return "text/plain";
+        case HTTP_APPLICATION_JSON: return "application/json";
 
         case HTTP_OCTET_STREAM:
         default: return "application/octet-stream";
     }
+}
+
+uhttp_content_type uhttp_content_type_from_str(const char *str){
+    if (strcmp(str, "application/octet-stream") == 0) return HTTP_OCTET_STREAM;
+    if (strcmp(str, "application/json") == 0) return HTTP_APPLICATION_JSON;
+    if (strcmp(str, "text/plain") == 0) return HTTP_TEXT_PLAIN;
+    return HTTP_OCTET_STREAM;
 }
 
 const char* uhttp_str_method(uhttp_method m) {
@@ -19,6 +29,70 @@ const char* uhttp_str_method(uhttp_method m) {
         default: return "UNKNOWN";
     }
 }
+
+// int uhttp_url_encode(const char *input, char **output){
+
+// }
+
+// int uhttp_url_decode(const char *input, char **output){
+
+// }
+
+uhttp_param uhttp_new_param(const char *name){
+    return (uhttp_param){
+        .name = strdup(name),
+        .value = NULL
+    };
+}
+
+int uhttp_parse_params(uhttp_request *req, uhttp_param *params, size_t n_params){
+    if (!req || !params) return -1;
+
+    bool all = true;
+    char *query = strchr(req->path, '?');
+    for (size_t i = 0; i < n_params; i++){
+        if (0 > uhttp_get_query_param(query, params[i].name, &params[i].value, 1024))
+            all = false;
+    }
+
+    return all? 0: 1;
+}
+
+void uhttp_free_params(uhttp_param *params, size_t n_params){
+    if (!params) return;
+
+    for (size_t i = 0; i < n_params; i++){
+        if(params[i].name) free(params[i].name);
+        if(params[i].value) free(params[i].value);
+    }
+}
+
+bool uhttp_any_params(uhttp_request *req){
+    return strchr(req->path, '?') != NULL;
+}
+
+char *uhttp_get_clear_route(uhttp_request *req){
+    char *q_ptr = strchr(req->path, '?');
+    if (q_ptr == NULL) return strdup(req->path);
+
+    int sz = q_ptr - req->path;
+    char *out = malloc(sz + 1);
+    if (!out) return NULL;
+
+    strncpy(out, req->path, sz);
+    out[sz] = '\0';
+
+    return out;
+}
+
+const char *uhttp_get_param(const uhttp_param *param, size_t n, const char *name){
+    for (size_t i = 0; i < n; i++){
+        if (strcmp(param[i].name, name) == 0) return param[i].value;
+    }
+
+    return NULL;
+}
+
 
 int uhttp_create_response(
     uhttp_response *out,
@@ -44,12 +118,31 @@ int uhttp_create_response(
 
     out->body = NULL;
     if (body && body_len > 0) {
+        if (body_len == SIZE_MAX){
+            body_len = strlen(body);
+            out->body_len = body_len;
+        }
+
         out->body = malloc(body_len);
         if (!out->body) return -1;
         memcpy(out->body, body, body_len);
     }
 
     return 0;
+}
+
+uhttp_response uhttp_create_responseq(
+    int status_code,
+    const char *status_text,
+
+    const void *body,
+    size_t      body_len,
+
+    uhttp_content_type content_type
+){
+    uhttp_response out = {0};
+    uhttp_create_response(&out, status_code, status_text, body, body_len, content_type);
+    return out;
 }
 
 int uhttp_create_request(

@@ -11,7 +11,6 @@
 #ifndef STATE_H
 
 typedef enum {
-    REQUEST_CONNECTION,
     REQUEST_PEERS
 } state_rtype;
 

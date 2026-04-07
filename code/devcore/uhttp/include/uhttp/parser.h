@@ -24,4 +24,11 @@ int uhttp_parse_request(
     uhttp_request *parsed
 );
 
+int uhttp_get_query_param(
+    const char *query,
+    const char *name,
+    char **out,
+    size_t max_out_size
+);
+
 #endif

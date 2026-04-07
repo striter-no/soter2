@@ -2,6 +2,7 @@
 #define UHTTP_API_H
 
 #include <stddef.h>
+#include <stdbool.h>
 
 #define MAX_HEADERS 20
 #define MAX_HEADER_SIZE 256
@@ -10,6 +11,7 @@
 typedef enum {
     HTTP_TEXT_PLAIN,
     HTTP_OCTET_STREAM,
+    HTTP_APPLICATION_JSON,
     HTTP_CONTENT_UNKNOWN
 } uhttp_content_type;
 
@@ -49,9 +51,34 @@ typedef struct {
     uhttp_content_type content_type;
 } uhttp_response;
 
+typedef struct {
+    char *name;
+    char *value;
+} uhttp_param;
+
+// int uhttp_url_encode(const char *input, char **output);
+// int uhttp_url_decode(const char *input, char **output);
+
+char *uhttp_get_clear_route(uhttp_request *req);
+bool uhttp_any_params(uhttp_request *req);
+uhttp_param uhttp_new_param   (const char *name);
+int         uhttp_parse_params(uhttp_request *req, uhttp_param *params, size_t n_params);
+void        uhttp_free_params (uhttp_param *params, size_t n_params);
+const char *uhttp_get_param(const uhttp_param *param, size_t n, const char *name);
+
 int uhttp_create_response(
     uhttp_response *out,
 
+    int status_code,
+    const char *status_text,
+
+    const void *body,
+    size_t      body_len,
+
+    uhttp_content_type content_type
+);
+
+uhttp_response uhttp_create_responseq(
     int status_code,
     const char *status_text,
 
@@ -100,6 +127,7 @@ int uhttp_build_request(
     size_t         *osz
 );
 
+uhttp_content_type uhttp_content_type_from_str(const char *str);
 const char* uhttp_str_content_type(uhttp_content_type ct);
 const char* uhttp_str_method(uhttp_method m);
 

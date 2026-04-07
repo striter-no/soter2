@@ -10,7 +10,7 @@
 
 // -- creation
 int rudp_dispatcher_new(
-    rudp_dispatcher *disp, 
+    rudp_dispatcher *disp,
     pvd_sender *sender,
 
     uint32_t self_uid
@@ -30,7 +30,7 @@ int rudp_dispatcher_new(
     }
 
     if (0 > prot_table_create(
-        sizeof(uint32_t), sizeof(rudp_connection*), 
+        sizeof(uint32_t), sizeof(rudp_connection*),
         DYN_OWN_BOTH, &disp->connections
     )){
         prot_queue_end(&disp->passed_pkts);
@@ -78,7 +78,7 @@ int rudp_dispatcher_end(rudp_dispatcher *disp){
 
 // -- connection managing
 int rudp_est_connection(
-    rudp_dispatcher *disp, 
+    rudp_dispatcher *disp,
     rudp_connection **out_conn,
     uint32_t other_UID,
     const nnet_fd  *nfd
@@ -99,7 +99,7 @@ int rudp_est_connection(
 }
 
 int rudp_get_connection(
-    rudp_dispatcher *disp, 
+    rudp_dispatcher *disp,
     uint32_t UID,
     rudp_connection **conn
 ){
@@ -127,7 +127,7 @@ int rudp_get_connection(
 }
 
 int rudp_close_conncetion(
-    rudp_dispatcher *disp, 
+    rudp_dispatcher *disp,
     uint32_t UID
 ){
     if (!disp) return -1;
@@ -145,7 +145,7 @@ int rudp_close_conncetion(
 // -- system
 
 int rudp_dispatcher_pass(
-    rudp_dispatcher *disp, 
+    rudp_dispatcher *disp,
     protopack *pkt
 ){
     if (!disp || !pkt) return -1;
@@ -191,17 +191,17 @@ static void *_rudp_dispatcher_worker(void *_args){
 
         if (r < 0){
             perror("poll");
-            continue;
+            break;
         }
 
-        
+
         now_ms = mt_time_get_millis_monocoarse();
-        
+
         if (now_ms - last_timeout_check >= 10) {
             // now_ms = mt_time_get_millis_monocoarse();
             prot_table_lock(&disp->connections);
             size_t r_size = 0;
-            rudp_connection *conns[disp->connections.table.array.len + 1]; 
+            rudp_connection *conns[disp->connections.table.array.len + 1];
 
             for (size_t i = 0; i < disp->connections.table.array.len;){
                 dyn_pair *pair = dyn_array_at(&disp->connections.table.array, i);
@@ -222,13 +222,13 @@ static void *_rudp_dispatcher_worker(void *_args){
             for (size_t i = 0; i < r_size; i++){
                 _rudp_conn_timeouts(conns[i], now_ms);
             }
-            
+
             last_timeout_check = now_ms;
         }
 
         if (r == 0) continue;
         mt_evsock_drain(&disp->ev_passed);
-        
+
         protopack *pkt;
         while (0 == prot_queue_pop(&disp->passed_pkts, &pkt) && atomic_load(&disp->is_running)){
             uint32_t c_uid = pkt->h_from;
@@ -245,13 +245,14 @@ static void *_rudp_dispatcher_worker(void *_args){
             free(pkt);
         }
     }
-    
+
+    atomic_store(&disp->is_running, false);
     return NULL;
 }
 
 static void _rudp_dispatcher_net_handler(rudp_dispatcher *disp, rudp_connection *conn, protopack *pkt, int64_t now_ms){
     // printf("[neth] got pkt: %u seq (%s)\n", pkt->seq, PROTOPACK_TYPES_CHAR[pkt->packtype]);
-    
+
     if (pkt->packtype == PACK_DATA){
         uint32_t pkt_seq = pkt->seq;
         uint32_t expected = (conn->last_recved_seq == UINT32_MAX) ? 0 : conn->last_recved_seq + 1;
@@ -277,7 +278,7 @@ static void _rudp_dispatcher_net_handler(rudp_dispatcher *disp, rudp_connection 
             || now_ms - conn->last_ack_timestamp >= conn->avg_rtt_ms / 2) {
             should_send_ack = true;
         }
-        
+
         if (now_ms - conn->last_ack_timestamp >= conn->ack_timeout_ms) {
             should_send_ack = true;
         }
@@ -289,11 +290,11 @@ static void _rudp_dispatcher_net_handler(rudp_dispatcher *disp, rudp_connection 
         if (should_send_ack) {
             if (conn->last_recved_seq != UINT32_MAX) {
                 protopack *msg = proto_msg_quick(conn->s_uid, conn->c_uid, conn->last_recved_seq, PACK_RACK);
-                
+
                 if (msg) {
                     pvd_sender_send(conn->sender, msg, &conn->nfd);
                     free(msg);
-                    
+
                     uint32_t packets_count = conn->packets_since_ack;
                     conn->last_ack_sent_seq = conn->last_recved_seq;
                     conn->packets_since_ack = 0;
@@ -304,7 +305,7 @@ static void _rudp_dispatcher_net_handler(rudp_dispatcher *disp, rudp_connection 
                     } else if (conn->avg_rtt_ms > 100) {
                         conn->ack_threshold = (conn->ack_threshold > 2) ? conn->ack_threshold - 1 : 2;
                     }
-                    
+
                     if (packets_count == 0 && conn->ack_threshold > 4) {
                         conn->ack_threshold = 4;
                     }
@@ -320,41 +321,41 @@ static void _rudp_dispatcher_net_handler(rudp_dispatcher *disp, rudp_connection 
 
     } else if (pkt->packtype == PACK_RACK){
         prot_array_lock(&conn->pkts_fhost);
-        
+
         int64_t rtt_sample = -1;
-        
+
         for (size_t i = 0; i < conn->pkts_fhost.array.len; ){
             rudp_pending_pkt *ppkt = _prot_array_at_unsafe(&conn->pkts_fhost, i);
-            
+
             if (ppkt->seq <= pkt->seq){
                 if (ppkt->seq == pkt->seq && ppkt->retransmit_count == 0) {
                     rtt_sample = now_ms - ppkt->timestamp;
                 }
-                
+
                 if (ppkt->copy_pack) free(ppkt->copy_pack);
-                
+
                 size_t last_idx = conn->pkts_fhost.array.len - 1;
                 rudp_pending_pkt *last_pkt = _prot_array_at_unsafe(&conn->pkts_fhost, last_idx);
                 *ppkt = *last_pkt;
 
                 // printf("[neth] removing from %u seq -> %u (x = %u seq)\n", pkt->seq, ppkt->seq, ppkt_x->seq);
                 _prot_array_remove_unsafe(&conn->pkts_fhost, last_idx);
-                
+
             } else {
                 i++;
             }
         }
-        
+
         if (rtt_sample > 0 && rtt_sample < 10000) {
             if (rtt_sample < 20) rtt_sample = 20;
-            
+
             if (rtt_sample > conn->avg_rtt_ms * 3 && conn->avg_rtt_ms > 50) {
                 conn->avg_rtt_ms = (conn->avg_rtt_ms * 7 + rtt_sample) / 8;
             } else {
                 conn->avg_rtt_ms = (conn->avg_rtt_ms * 3 + rtt_sample) / 4;
             }
         }
-        
+
         prot_array_unlock(&conn->pkts_fhost);
         free(pkt);
     } else if (pkt->packtype == PACK_FIN) {
@@ -364,14 +365,14 @@ static void _rudp_dispatcher_net_handler(rudp_dispatcher *disp, rudp_connection 
 
         mt_evsock_notify(&conn->ev_reordered);
         rudp_close_conncetion(disp, remote_uid);
-        
+
         free(pkt);
         return;
 
     } else {
         fprintf(
-            stderr, 
-            "[rudp][disp][nhandler] error: to handler passed unknown packet with type %s\n", 
+            stderr,
+            "[rudp][disp][nhandler] error: to handler passed unknown packet with type %s\n",
             PROTOPACK_TYPES_CHAR[pkt->packtype]
         );
 

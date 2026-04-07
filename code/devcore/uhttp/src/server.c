@@ -79,7 +79,10 @@ void *runner(void *_args){
             }
         }
 
-        if (mt_evsock_wait(&serv->response_ev, 0) > 0) {
+        if (r < 0) break;
+
+        r = mt_evsock_wait(&serv->response_ev, 0);
+        if (r > 0) {
             uhttp_high_response resp = {0};
 
             while (0 == prot_queue_pop(&serv->responses, &resp)){
@@ -111,6 +114,7 @@ void *runner(void *_args){
         }
     }
 
+    atomic_store(&serv->is_running, false);
     dyn_array_end(&clients);
     return NULL;
 }
@@ -202,6 +206,8 @@ int uhttp_server_end(uhttp_serv *server){
     ln_tsock_close (&server->sock);
     mt_evsock_close(&server->ev);
 
+    if (server->routes)
+        free(server->routes);
     return 0;
 }
 
@@ -276,11 +282,13 @@ int uhttp_server_poll_routes(uhttp_serv *server){
 
     while (uhttp_server_isrunning(server)){
         int r = uhttp_wait_requests(server, 500);
-        if (r <= 0) continue;
+        if (r == 0) continue;
+        if (r < 0) break;
 
         uhttp_high_request req;
         while (0 == uhttp_request_iterate(server, &req)){
             uhttp_response resp;
+            char *clear_req_path = uhttp_get_clear_route(&req.req);
 
             printf("[uhttp][poller] %s request \"%s\"\n", uhttp_str_method(req.req.method), req.req.path);
 
@@ -288,21 +296,28 @@ int uhttp_server_poll_routes(uhttp_serv *server){
             for (size_t i = 0; i < server->routes_n; i++){
                 uhttp_route *route = &server->routes[i];
 
-                if (strcmp(req.req.path, route->path) == 0){
+                if (strcmp(clear_req_path, route->path) == 0){
                     resp = route->handler(&req, server->ctx);
+                    printf("[uhttp][poller] response: %u %s %*.s\n", resp.status_code, resp.status_text, (int)resp.body_len, (char*)resp.body);
+
                     skip = false;
                     break;
                 }
             }
+            free(clear_req_path);
 
             if (skip){
+                uhttp_create_response(&resp, 404, "Path is not found", NULL, 0, HTTP_TEXT_PLAIN);
+                uhttp_send_response(server, &resp, &req);
                 uhttp_free_request(&req.req);
                 continue;
             }
 
             uhttp_send_response(server, &resp, &req);
+            uhttp_free_request(&req.req);
         }
     }
 
+    uhttp_server_stop(server);
     return 0;
 }

@@ -37,6 +37,7 @@ int soter2_hnd_PUNCH(protopack *pck, const nnet_fd *nfd, pvd_sender *s, void *_c
         return -1;
     }
 
+    printf("[hnd][punch] got new punch\n");
     if (0 > peers_db_get(ctx->p_db, pck->h_from, &info)){
         printf("[hnd][punch] `%u` is unknown, adding peer\n", pck->h_from);
 
@@ -121,33 +122,53 @@ int soter2_hnd_STATE (protopack *pck, const nnet_fd *nfd, pvd_sender *s, void *_
     (void)s;
 
     // printf("got STATE packet...\n");
-    if (pck->d_size != sizeof(state_request)){
+    // Response format: 4 bytes (network order) count + array of state_request
+    if (pck->d_size < sizeof(uint32_t)){
         fprintf(stderr, "[hnd][state] bad packet size: %u\n", pck->d_size);
         return -1;
     }
 
-    state_request req;
-    if (0 > state_rreceive(pck->data, &req)){
+    // read count from first 4 bytes
+    uint32_t net_count = 0;
+    memcpy(&net_count, pck->data, sizeof(uint32_t));
+    uint32_t peers_count = ntohl(net_count);
+
+    // validate packet size
+    size_t expected_size = sizeof(uint32_t) + peers_count * sizeof(state_request);
+    if (pck->d_size != expected_size){
+        fprintf(stderr, "[hnd][state] bad packet size: %u (expected %zu for %u peers)\n", pck->d_size, expected_size, peers_count);
         return -1;
     }
 
-    if (req.uid == ctx->rudp->self_uid){
-        fprintf(stderr, "[hnd][state] rejecting self-peer\n");
-        return -1;
+    // process each peer in the array
+    uint8_t *data_ptr = pck->data + sizeof(uint32_t);
+    for (uint32_t i = 0; i < peers_count; i++){
+        state_request req;
+        if (0 > state_rreceive(data_ptr + i * sizeof(state_request), &req)){
+            fprintf(stderr, "[hnd][state] failed to receive peer %u\n", i);
+            continue;
+        }
+
+        if (req.uid == ctx->rudp->self_uid){
+            fprintf(stderr, "[hnd][state] rejecting self-peer\n");
+            continue;
+        }
+
+        int64_t dt = mt_time_get_seconds() - req.timestamp;
+        if (dt >= 30){
+            fprintf(stderr, "[hnd][state] rejecting peer too old (delta: %li)\n", dt);
+            continue;
+        }
+
+        state_sys_new_ans(ctx->ssytem, &req, ln_nfd2addr(nfd));
     }
 
-    int64_t dt = mt_time_get_seconds() - req.timestamp;
-    if (dt >= 30){
-        fprintf(stderr, "[hnd][state] rejecting peer, too old (delta: %li)\n", dt);
-        return -1;
-    }
-
-    state_sys_new_ans(ctx->ssytem, &req, ln_nfd2addr(nfd));
     return 0;
 }
 
 int soter2_hnd_TURN(protopack *pck, const nnet_fd *nfd, pvd_sender *s, void *_ctx){
     app_context *ctx = _ctx;
+    (void)s;
 
     naddr_t addr = ln_nfd2addr(nfd);
     if (pck->d_size < sizeof(turn_request)){

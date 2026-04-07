@@ -138,7 +138,6 @@ int uhttp_parse_request(
         return UHTTP_PARSE_ERROR;
     }
 
-    /* Разбираем метод */
     const unsigned char *space1 = NULL;
     for (const unsigned char *p = data; p < line_end; p++) {
         if (*p != ' ') continue;
@@ -147,9 +146,8 @@ int uhttp_parse_request(
         break;
     }
 
-    if (!space1) {
+    if (!space1)
         return UHTTP_PARSE_ERROR;
-    }
 
     size_t method_len = space1 - data;
     if (method_len == 3 && memcmp(data, "GET", 3) == 0) {
@@ -160,7 +158,6 @@ int uhttp_parse_request(
         parsed->method = HTTP_METHOD_UNKNOWN;
     }
 
-    /* Разбираем путь */
     const unsigned char *path_start = space1 + 1;
     const unsigned char *space2 = NULL;
     for (const unsigned char *p = path_start; p < line_end; p++) {
@@ -350,4 +347,73 @@ int uhttp_parse_response(
     parsed->content_type = HTTP_OCTET_STREAM; /* По умолчанию */
 
     return UHTTP_PARSE_OK;
+}
+
+int uhttp_get_query_param(const char *query, const char *name, char **out, size_t max_out_size) {
+    if (!query || !name || !out || max_out_size == 0 || *name == '\0')
+        return -3;
+
+    *out = NULL;
+
+    if (*query == '?') query++;
+
+    size_t name_len = strlen(name);
+    const char *p = query;
+
+    while (*p) {
+        if (p > query && *(p - 1) != '&') {
+            p++;
+            continue;
+        }
+
+        /* Проверяем имя */
+        if (strncmp(p, name, name_len) == 0 && *(p + name_len) == '=') {
+            const char *val_start = p + name_len + 1;
+            const char *val_end = strchr(val_start, '&');
+            if (!val_end) val_end = strchr(val_start, '\0');
+
+            size_t encoded_len = (size_t)(val_end - val_start);
+            *out = malloc(max_out_size);
+            if (!*out) return -2;
+
+            size_t i = 0;
+            const char *src = val_start;
+            const char *limit = val_start + encoded_len;
+
+            while (src < limit && i < max_out_size - 1) {
+                if (*src == '%') {
+                    if (src + 2 < limit &&
+                        isxdigit((unsigned char)*(src + 1)) &&
+                        isxdigit((unsigned char)*(src + 2))) {
+
+                        /* Быстрый hex -> byte без strtol */
+                        char h1 = (char)tolower((unsigned char)*(src + 1));
+                        char h2 = (char)tolower((unsigned char)*(src + 2));
+                        unsigned char byte = 0;
+
+                        byte |= (h1 >= 'a') ? (h1 - 'a' + 10) : (h1 - '0');
+                        byte <<= 4;
+                        byte |= (h2 >= 'a') ? (h2 - 'a' + 10) : (h2 - '0');
+
+                        (*out)[i++] = (char)byte;
+                        src += 3;
+                        continue;
+                    }
+                } else if (*src == '+') {
+                    (*out)[i++] = ' ';
+                    src++;
+                    continue;
+                }
+                (*out)[i++] = *src++;
+            }
+            (*out)[i] = '\0';
+            return 0;
+        }
+
+        const char *next_amp = strchr(p, '&');
+        if (!next_amp) break;
+        p = next_amp + 1;
+    }
+
+    return -1;
 }

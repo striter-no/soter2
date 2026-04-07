@@ -24,7 +24,7 @@ static void *_daemon_wrapper(void *_args){
     return NULL;
 }
 
-int daemon_run(daemon *d, bool as_iterator, bool (*func)(void *args), void *args){
+int daemon_run(mdaemon *d, bool as_iterator, bool (*func)(void *args), void *args){
     if (!d || !func) return -1;
 
     daemon_wrapper_args *wargs = malloc(sizeof(*wargs));
@@ -42,7 +42,7 @@ int daemon_run(daemon *d, bool as_iterator, bool (*func)(void *args), void *args
     return 0;
 }
 
-int daemon_stop(daemon *d){
+int daemon_stop(mdaemon *d){
     if (!d) return -1;
 
     atomic_store(&d->is_running, false);

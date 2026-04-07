@@ -132,6 +132,7 @@ static void *pvd_sender_worker(void *_args){
         int r = mt_evsock_wait(&sender->newpack_es, 1000);
         if (r < 0) {
             perror("poll()");
+            break;
         }
         if (r == 0) continue;
 
@@ -191,5 +192,6 @@ static void *pvd_sender_worker(void *_args){
         // prot_queue_unlock(&sender->packets);
     }
 
+    atomic_store(&sender->is_running, false);
     return NULL;
 }

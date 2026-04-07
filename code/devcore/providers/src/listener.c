@@ -73,7 +73,7 @@ static void *pvd_listener_worker(void *_args){
     nnet_fd from = {0};
     char    buf[2048] = {0};
     while (atomic_load(&listener->is_running)){
-        int r = ln_wait_netfd(&listener->p_usocket->fd, POLLIN, 3000);
+        int r = ln_wait_netfd(&listener->p_usocket->fd, POLLIN, 1000);
         if (r == 0) {continue;}
         if (r < 0)  {perror("poll()"); continue;}
 

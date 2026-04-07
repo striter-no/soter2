@@ -34,9 +34,8 @@ int state_sys_new_ans(state_system *sys, const state_request *req, naddr_t serve
 
 int state_sys_wait(state_system *sys, state_request *out, naddr_t *from, int timeout){
     if (!sys || !out) return -1;
-    if (0 == mt_evsock_wait(&sys->new_state_fd, timeout)){
-        return 0;
-    }
+    int r = mt_evsock_wait(&sys->new_state_fd, timeout);
+    if (r <= 0) return r;
 
     state_sys_request sreq;
     mt_evsock_drain(&sys->new_state_fd);

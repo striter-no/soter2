@@ -129,6 +129,10 @@ const char *s2_fingerprint(s2_systems *sys){
     return crypto_fingerprint(sys->crypto_mod.self_sign.id_pub);
 }
 
+char *s2_pubuid(s2_systems *sys){
+    return crypto_encode_pubkey_uid(sys->crypto_mod.self_sign.id_pub, sys->crypto_mod.UID);
+}
+
 int s2_sys_save_sign(s2_systems *sys, const char *path){
     if (0 > sign_store(&sys->crypto_mod.self_sign, path))
         return -1;
@@ -151,4 +155,61 @@ int s2_sys_upd_sign(s2_systems *sys, const char *path){
         return s2_sys_load_sign(sys, path);
     else
         return s2_sys_save_sign(sys, path);
+}
+
+nat_type s2_sys_stun_perf(s2_systems *s, stun_addr *stuns, size_t stuns_n){
+    if (!s || !stuns) return NAT_ERROR;
+    return nat_parallel_req(&s->io_sys.usock, stuns, stuns_n);
+}
+
+int s2_sys_new_peer(
+    s2_systems *s,
+    naddr_t addr,
+    naddr_t serv_addr,
+    uint32_t UID,
+    unsigned char pubkey[CRYPTO_PUBKEY_BYTES]
+){
+    if (!s) return -1;
+
+    peer_info info = {
+        .state = PEER_ST_INITED,
+        .UID = UID,
+        .ctx = NULL,
+        .last_seen = mt_time_get_millis_monocoarse(),
+        .nfd = ln_netfdq(&addr),
+        .server = serv_addr,
+    };
+    memcpy(info.pubkey, pubkey, CRYPTO_PUBKEY_BYTES);
+    return peers_db_add(&s->peers_sys, info);
+}
+
+int s2_sys_nat_punch(
+    s2_systems *s,
+    uint32_t UID
+){
+    if (!s) return -1;
+
+    peer_info info;
+    if (0 > peers_db_get(&s->peers_sys, UID, &info))
+        return -1;
+
+    light_peer_info linfo = {0};
+    linfo.addr = s->io_sys.usock.addr;
+    linfo.UID  = s->rudp_disp.self_uid;
+    linfo.server = info.server;
+    memcpy(linfo.pubkey, s->crypto_mod.self_sign.id_pub, CRYPTO_PUBKEY_BYTES);
+
+    protopack *punch_msg = proto_punch_msg(s->rudp_disp.self_uid, UID, (unsigned char*)&linfo);
+
+    pvd_sender_send(&s->io_sys.sender, punch_msg, &info.nfd);
+
+    naddr_t addr = ln_nfd2addr(&info.nfd);
+    printf("[s2] NAT punch sent to %s:%u\n", ln_gip(&addr), ln_gport(&addr));
+    free(punch_msg);
+
+    return 0;
+}
+
+int s2_sys_wstate(s2_systems *s, uint32_t UID, peer_state state, peer_info *out_info){
+    return peers_db_wait(&s->peers_sys, UID, state, out_info);
 }
