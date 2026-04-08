@@ -30,7 +30,8 @@ void ln_usock_close(ln_socket *sck){
 
 int ln_usock_bind(ln_socket *sck, naddr_t addr){
     if (!sck) return -1;
-    ln_netfd(&addr, &sck->fd);
+    if (0 > ln_netfd(&addr, &sck->fd)) return -1;
+    sck->addr = addr;
 
     return bind(
         sck->fd.rfd,

@@ -9,3 +9,5 @@ dev
 .zed
 venv
 __pycache__
+*.log
+*.pem
