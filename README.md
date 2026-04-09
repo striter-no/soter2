@@ -23,9 +23,11 @@
 sudo ./code/sodium_inst.sh
 ```
 
-2. You need to install [yyjson](https://github.com/ibireme/yyjson)
+2. You need to install [picoquic](https://github.com/private-octopus/picoquic)
 
-3. You need **ABS** build system in order to build this project:
+3. You need to install [yyjson](https://github.com/ibireme/yyjson)
+
+4. You need **ABS** build system in order to build this project:
 
 ```sh
 git clone https://github.com/striter-no/abs
@@ -35,8 +37,8 @@ cd abs
 make && make install 
 ```
 
-4. Than in root directory run `abs`, it will automaticly build all modules in project
-5. After successfull build you can test modules `code/cli` and `code/stating`
+5. Than in root directory run `abs`, it will automaticly build all modules in project
+6. After successfull build you can test modules `code/cli` and `code/stating`
 
 ### How to use
 
