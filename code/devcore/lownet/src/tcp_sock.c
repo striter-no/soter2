@@ -37,7 +37,9 @@ int ln_tsock_connect(ln_socket *sck, naddr_t addr){
     if (!sck) return -1;
 
     sck->addr = addr;
-    ln_netfd(&addr, &sck->fd);
+    if (ln_netfd(&addr, &sck->fd) < 0) {
+        return -1;
+    }
 
     return connect(
         sck->fd.rfd,

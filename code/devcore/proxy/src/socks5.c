@@ -135,8 +135,9 @@ int prx_socks5_handle_request(ln_socket *sock, s5_uni_addr *out_addr) {
         if (ln_tsock_readx(sock, sizeof(in_port_t), &port, -1) <= 0)
             return -1;
 
-        strcpy(out_addr->uni.ip.ip.v4.ip, inet_ntoa((struct in_addr){.s_addr = ip}));
+        inet_ntop(AF_INET, &ip, out_addr->uni.ip.ip.v4.ip, INET_ADDRSTRLEN);
         out_addr->uni.ip.ip.v4.port = ntohs(port);
+        out_addr->uni.ip.t = nADDR_IPV4;
         out_addr->type = _S5_IP_ADDR;
         return 0;
     } else if (req.addr_type == SOCKS5_ATYP_DOMAIN_NAME) {
@@ -172,7 +173,7 @@ int prx_resolve_address(s5_uni_addr address, ln_socket *sock){
 
     switch (address.type){
         case _S5_IP_ADDR: {
-            // printf("[prx] ip addr\n");
+            printf("[prx] ip addr: %s:%u\n", ln_gip(&address.uni.ip), ln_gport(&address.uni.ip));
             sock->addr = address.uni.ip;
             ln_tsock_new(sock);
             if (ln_tsock_connectx(sock, address.uni.ip, -1) <= 0) {
