@@ -95,7 +95,7 @@ void *runner(void *_args){
                 uhttp_build_response(&resp.resp, &data, &sz);
                 uhttp_free_response(&resp.resp);
 
-                ln_tsock_writex(&sock, data, sz, 500);
+                ln_tsock_writex(&sock, sz, data, 500);
                 free(data);
             }
         }

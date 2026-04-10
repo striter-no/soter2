@@ -48,13 +48,24 @@ int ln_tsock_connect(ln_socket *sck, naddr_t addr){
 
 int ln_tsock_connectx(ln_socket *sck, naddr_t addr, int timeout){
     int r = ln_tsock_connect(sck, addr);
-    if (r < 0 && (errno == EWOULDBLOCK || errno == EAGAIN)){
-        int tr = ln_wait_netfd(&sck->fd, POLLIN, timeout);
-        return tr <= 0 ? -1: 0;
-    } else if (r < 0)
-        return r;
 
-    return 0;
+    if (r < 0 && (errno == EWOULDBLOCK || errno == EAGAIN || errno == EINPROGRESS)){
+        int tr = ln_wait_netfd(&sck->fd, POLLOUT, timeout);
+        if (tr <= 0) return tr;
+
+        int so_error = 0;
+        socklen_t len = sizeof(so_error);
+        if (getsockopt(sck->fd.rfd, SOL_SOCKET, SO_ERROR, &so_error, &len) < 0 || so_error != 0) {
+            errno = so_error;
+            return -1;
+        }
+
+        return 1;
+    } else if (r < 0) {
+        return r;
+    }
+
+    return 1;
 }
 
 int ln_tsock_bind(ln_socket *sck, naddr_t addr){
@@ -107,7 +118,7 @@ ssize_t ln_tsock_write(ln_socket *sck, void *buf, size_t n){
     return write(sck->fd.rfd, buf, n);
 }
 
-ssize_t ln_tsock_readx (ln_socket *sck, void *buf, size_t n, int timeout_ms){
+ssize_t ln_tsock_readx (ln_socket *sck, size_t n, void *buf, int timeout_ms){
     if (!sck || !buf) return -1;
 
     size_t already_read = 0;
@@ -140,7 +151,7 @@ ssize_t ln_tsock_readx (ln_socket *sck, void *buf, size_t n, int timeout_ms){
     return already_read;
 }
 
-ssize_t ln_tsock_writex(ln_socket *sck, void *buf, size_t n, int timeout_ms){
+ssize_t ln_tsock_writex(ln_socket *sck, size_t n, void *buf, int timeout_ms){
     if (!sck || !buf) return -1;
 
     size_t already_written = 0;

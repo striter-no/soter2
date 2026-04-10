@@ -67,6 +67,7 @@ int      ln_wait_netfd(nnet_fd *fd, int events, int timeout);
 uint32_t ln_nfd2hash(const nnet_fd *fd);
 
 bool     ln_addrcmp(naddr_t *a, naddr_t *b);
+int      ln_setopt(ln_socket *sock, int LEVEL, int OPT_NAME, int value);
 
 #endif
 #define LOWNET_CORE_H

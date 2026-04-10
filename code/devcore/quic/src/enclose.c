@@ -1,8 +1,7 @@
 #include <quic/enclose.h>
 
-int enclose_init(enclose_core *core, quic_core *quic, bool is_server){
-    if 
-    
+int enclose_init(enclose_core *core, bool is_server){
+
     return 0;
 }
 

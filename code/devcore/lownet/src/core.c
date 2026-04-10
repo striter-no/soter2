@@ -370,3 +370,8 @@ uint32_t ln_nfd2hash(const nnet_fd *fd){
 
     return murmurhash3_32(data, data_len, 0xDEADBEF);
 }
+
+int ln_setopt(ln_socket *sock, int LEVEL, int OPT_NAME, int value){
+    if (!sock) return -1;
+    return setsockopt(sock->fd.rfd, LEVEL, OPT_NAME, &value, sizeof(value));
+}

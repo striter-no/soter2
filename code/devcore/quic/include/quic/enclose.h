@@ -24,9 +24,7 @@ typedef enum {
 } enclose_state_t;
 
 typedef struct {
-    quic_session *quic_sess;
-    uint64_t      stream_id;
-    ln_socket *enclosed_sock;
+    uint64_t   stream_id;
     enclose_state_t state;
 
     prot_queue tx_queue; // from socket to QUIC
@@ -36,24 +34,28 @@ typedef struct {
 } enclose_tunnel;
 
 typedef struct {
-    quic_core *quic;
-    prot_table tunnels;  // key: hash(addr+port+proto), value: enclose_tunnel*
+    prot_table   tunnels;  // key: hash(addr+port+proto), value: enclose_tunnel*
     mt_eventsock data_ready_ev;
+    uint64_t     next_tunnel_id;
+
     bool is_server;
-    uint64_t next_tunnel_id;
+    int (*f_TUNNEL_read) (void *out_buf,      size_t read_sz);
+    int (*f_TUNNEL_write)(const void *in_buf, size_t write_sz);
 } enclose_core;
 
-int enclose_init(enclose_core *core, quic_core *quic, bool is_server);
+int enclose_init(enclose_core *core, bool is_server);
 int enclose_clear(enclose_core *core);
 
 int enclose_tunnel_open(enclose_core *core, naddr_t *addr,
                         enclose_proto_t proto, uint64_t *tunnel_id);
 int enclose_tunnel_close(enclose_core *core, uint64_t tunnel_id);
 
+// write to tx_queue (SOCKET->PROTO)
 int enclose_write(enclose_core *core, uint64_t tunnel_id,
                   const uint8_t *data, size_t len);
+
+// read from rx_queue (PROTO->SOCKET)
 int enclose_read(enclose_core *core, uint64_t tunnel_id,
                  uint8_t *buf, size_t *len, int timeout);
-
 
 #endif

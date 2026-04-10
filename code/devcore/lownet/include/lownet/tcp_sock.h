@@ -18,7 +18,7 @@ int  ln_tsock_accept4(ln_socket *sck, ln_socket *new_sock);
 ssize_t ln_tsock_read (ln_socket *sck, void *buf, size_t n);
 ssize_t ln_tsock_write(ln_socket *sck, void *buf, size_t n);
 
-ssize_t ln_tsock_readx (ln_socket *sck, void *buf, size_t n, int timeout_ms);
-ssize_t ln_tsock_writex(ln_socket *sck, void *buf, size_t n, int timeout_ms);
+ssize_t ln_tsock_readx (ln_socket *sck, size_t n, void *buf, int timeout_ms);
+ssize_t ln_tsock_writex(ln_socket *sck, size_t n, void *buf, int timeout_ms);
 
 #endif
